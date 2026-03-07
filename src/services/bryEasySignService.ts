@@ -1,18 +1,11 @@
 import { bryAuthService } from './bryAuthService';
-import * as fs from 'fs';
-import * as path from 'path';
-
-interface EasySignImage {
-  imageNonce: string;
-  image: string;
-}
 
 interface EasySignDocument {
+  documentNonce: string;
   name: string;
   base64Document: string;
   signaturePositions?: Array<{
     signerNonce: string;
-    imageNonce: string;
     page: number;
     x: number;
     y: number;
@@ -26,7 +19,6 @@ interface EasySignSigner {
   name: string;
   email: string;
   authentications?: string[];
-  authenticationOptions?: string[];
   typeMessaging?: string[];
   positioningMode?: string;
   signatureConfig?: {
@@ -37,7 +29,6 @@ interface EasySignSigner {
 interface EasySignRequest {
   name: string;
   clientName: string;
-  images?: EasySignImage[];
   signersData: EasySignSigner[];
   documents: EasySignDocument[];
 }
@@ -68,24 +59,6 @@ export class BryEasySignService {
       throw new Error('BRY_EASYSIGN_URL não configurada');
     }
     return url;
-  }
-
-  private async generateStampImage(signerName: string): Promise<string> {
-    try {
-      console.info(`[BryEasySignService] Carregando imagem do carimbo para: ${signerName}`);
-
-      const imagePath = path.join(process.cwd(), 'src', 'services', 'logo-cmso.png');
-      const imageBuffer = fs.readFileSync(imagePath);
-      const logoBase64 = imageBuffer.toString('base64');
-
-      console.info(`[BryEasySignService] Logo base64 length: ${logoBase64.length}`);
-      console.info(`[BryEasySignService] Imagem do carimbo carregada com sucesso`);
-
-      return logoBase64;
-    } catch (error) {
-      console.error(`[BryEasySignService] Erro ao carregar imagem do carimbo:`, error);
-      throw new Error('Falha ao carregar imagem do carimbo');
-    }
   }
 
   private async makeAuthenticatedRequest(
@@ -143,23 +116,15 @@ export class BryEasySignService {
     console.info(`[BryEasySignService] Signer: ${signerName} (${signerEmail})`);
     console.info(`[BryEasySignService] Base64 length: ${documentBase64.length}`);
 
-    const stampImageBase64 = await this.generateStampImage(signerName);
-
-const payload: EasySignRequest = {
-      name: 'Assinatura Facial do Funcionario',
+    const payload: EasySignRequest = {
+      name: 'Assinatura via iFrame',
       clientName: 'Sistema Interno',
-      images: [
-        {
-          imageNonce: 'logo-empresa',
-          image: stampImageBase64,
-        }
-      ],
       signersData: [
         {
           signerNonce: 'funcionario-01',
           name: signerName.toUpperCase(),
           email: signerEmail.toLowerCase(),
-          authenticationOptions: ['SELFIE'],
+          authentications: ['SELFIE', 'IP'],
           typeMessaging: ['LINK'],
           positioningMode: 'CREATOR',
           signatureConfig: {
@@ -169,17 +134,17 @@ const payload: EasySignRequest = {
       ],
       documents: [
         {
+          documentNonce: 'doc-01',
           name: documentName,
           base64Document: documentBase64,
           signaturePositions: [
             {
               signerNonce: 'funcionario-01',
-              imageNonce: 'logo-empresa',
               page: 1,
-              x: 50,
-              y: 650,
-              width: 200,
-              height: 80,
+              x: 100,
+              y: 150,
+              width: 250,
+              height: 70,
             }
           ],
         },
@@ -187,9 +152,6 @@ const payload: EasySignRequest = {
     };
 
     console.info(`[BryEasySignService] Verificando estrutura do payload antes de enviar...`);
-    console.log('[BryEasySignService] Stamp image length:', stampImageBase64.length);
-    console.log('[BryEasySignService] Stamp image prefix:', stampImageBase64.substring(0, 50));
-    
     const payloadStr = JSON.stringify(payload);
     console.log('[BryEasySignService] Payload signersData:', JSON.stringify(payload.signersData));
 
