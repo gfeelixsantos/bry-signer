@@ -9,6 +9,8 @@ export default function EasySignPage() {
   const [step, setStep] = useState<Step>('form');
   const [signerName, setSignerName] = useState('Gabriel Teste Facial');
   const [signerEmail, setSignerEmail] = useState('esocial@cmsocupacional.com.br');
+  const [personalIdentifier, setPersonalIdentifier] = useState('428.891.788.38');
+  const [personalIdentifierType, setPersonalIdentifierType] = useState('CPF');
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [pdfBase64, setPdfBase64] = useState('');
   const [requestId, setRequestId] = useState('');
@@ -74,7 +76,7 @@ export default function EasySignPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!signerName || !signerEmail || !pdfFile) {
+    if (!signerName || !signerEmail || !pdfFile || !personalIdentifier || !personalIdentifierType) {
       setError('Preencha todos os campos e faça upload do PDF');
       return;
     }
@@ -87,7 +89,9 @@ export default function EasySignPage() {
         pdfBase64,
         pdfFile.name,
         signerName,
-        signerEmail
+        signerEmail,
+        personalIdentifier,
+        personalIdentifierType
       );
 
       if (result.success && result.requestId && result.documentNonce && result.signatureLink) {
@@ -105,47 +109,58 @@ export default function EasySignPage() {
     }
   };
 
-const handleCheckSignature = async () => {
+  const handleDownload = async (type: 'signed' | 'report') => {
     if (!requestId || !documentNonce) {
       setError('Dados da assinatura incompletos');
       return;
     }
 
     setLoading(true);
+    setError('');
 
     try {
-      const urlSigned = `/api/bry/download?requestId=${requestId}&documentNonce=${documentNonce}&type=signed`;
-      const urlReport = `/api/bry/download?requestId=${requestId}&documentNonce=${documentNonce}&type=report`;
+      const url = `/api/bry/download?requestId=${requestId}&documentNonce=${documentNonce}&type=${type}`;
+      const fileName = type === 'signed' ? 'documento_assinado.pdf' : 'relatorio_evidencias.pdf';
 
-      const [signedPdf, evidenceReport] = await Promise.all([
-        fetch(urlSigned).then(res => {
-          if (!res.ok) throw new Error('Erro ao baixar documento assinado');
-          return res.blob();
-        }),
-        fetch(urlReport).then(res => {
-          if (!res.ok) throw new Error('Erro ao baixar relatório de evidências');
-          return res.blob();
-        })
-      ]);
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('Erro ao baixar arquivo');
+      
+      const blob = await res.blob();
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(downloadUrl);
+    } catch (error) {
+      console.error(error);
+      setError('Erro ao baixar o arquivo. Tente novamente.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
-      const signedUrl = window.URL.createObjectURL(signedPdf);
-      const reportUrl = window.URL.createObjectURL(evidenceReport);
+  const handleCheckSignature = async () => {
+    if (!requestId) return;
 
-      const link1 = document.createElement('a');
-      link1.href = signedUrl;
-      link1.download = 'documento_assinado.pdf';
-      link1.click();
-      window.URL.revokeObjectURL(signedUrl);
-
-      const link2 = document.createElement('a');
-      link2.href = reportUrl;
-      link2.download = 'relatorio_evidencias.pdf';
-      link2.click();
-      window.URL.revokeObjectURL(reportUrl);
-
-      setStep('complete');
-    } catch {
-      setError('Erro ao baixar os arquivos. Tente novamente.');
+    setLoading(true);
+    try {
+      const result = await checkSignatureStatus(requestId);
+      if (result.success) {
+        setEnvelopeStatus(result.status || '');
+        setSignerStatus(result.signerStatus || '');
+        
+        if (result.isComplete) {
+          setIsSignatureComplete(true);
+          setStep('complete');
+        } else {
+           setError('A assinatura ainda não foi concluída. Tente novamente em instantes.');
+        }
+      }
+    } catch (error) {
+      setError('Erro ao verificar status da assinatura.');
     } finally {
       setLoading(false);
     }
@@ -155,6 +170,8 @@ const resetFlow = () => {
     setStep('form');
     setSignerName('');
     setSignerEmail('');
+    setPersonalIdentifier('');
+    setPersonalIdentifierType('CPF');
     setPdfFile(null);
     setPdfBase64('');
     setRequestId('');
@@ -293,11 +310,17 @@ const resetFlow = () => {
                 </div>
                 
                 <button
-                  onClick={handleCheckSignature}
-                  disabled={loading || !isSignatureComplete}
+                  onClick={() => {
+                    if (isSignatureComplete) {
+                        setStep('complete');
+                    } else {
+                        handleCheckSignature();
+                    }
+                  }}
+                  disabled={loading}
                   className="w-full bg-emerald-600 text-white py-3 px-6 rounded-lg font-medium hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
-                  {loading ? 'Baixando...' : isSignatureComplete ? 'Baixar PDF Assinado' : 'Aguarde a assinatura ser concluída...'}
+                  {loading ? 'Verificando...' : isSignatureComplete ? 'Acessar Arquivos' : 'Verificar Status da Assinatura'}
                 </button>
               </div>
             </div>
@@ -326,14 +349,41 @@ const resetFlow = () => {
                 Documento Assinado com Sucesso!
               </h2>
               <p className="text-gray-600">
-                O PDF assinado foi baixado automaticamente
+                A assinatura foi concluída. Baixe os arquivos abaixo:
               </p>
-              <button
-                onClick={resetFlow}
-                className="bg-emerald-600 text-white py-3 px-8 rounded-lg font-medium hover:bg-emerald-700 transition-colors"
-              >
-                Assinar Novo Documento
-              </button>
+              
+              <div className="flex flex-col gap-4 max-w-xs mx-auto">
+                <button
+                    onClick={() => handleDownload('signed')}
+                    disabled={loading}
+                    className="w-full bg-emerald-600 text-white py-3 px-6 rounded-lg font-medium hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+                >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                    </svg>
+                    Baixar Documento Assinado
+                </button>
+
+                <button
+                    onClick={() => handleDownload('report')}
+                    disabled={loading}
+                    className="w-full bg-blue-600 text-white py-3 px-6 rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+                >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    Baixar Relatório de Evidências
+                </button>
+              </div>
+
+              <div className="pt-4 border-t border-gray-200 mt-6">
+                  <button
+                    onClick={resetFlow}
+                    className="text-emerald-600 font-medium hover:text-emerald-800 transition-colors"
+                  >
+                    Assinar Novo Documento
+                  </button>
+              </div>
             </div>
           )}
         </div>

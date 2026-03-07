@@ -6,7 +6,9 @@ export async function createSignatureRequest(
   documentBase64: string,
   fileName: string,
   signerName: string,
-  signerEmail: string
+  signerEmail: string,
+  personalIdentifier: string,
+  personalIdentifierType: string
 ): Promise<{
   success: boolean;
   requestId?: string;
@@ -18,12 +20,15 @@ export async function createSignatureRequest(
     console.info('[EasySignAction] Criando requisição de assinatura facial...');
     console.info(`[EasySignAction] Arquivo: ${fileName}`);
     console.info(`[EasySignAction] Signer: ${signerName} <${signerEmail}>`);
+    console.info(`[EasySignAction] CPF: ${personalIdentifier}`);
 
     const result = await bryEasySignService.createSignatureRequest(
       documentBase64,
       fileName,
       signerName,
-      signerEmail
+      signerEmail,
+      personalIdentifier,
+      personalIdentifierType
     );
 
     return {

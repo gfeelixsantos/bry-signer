@@ -22,6 +22,8 @@ interface EasySignSigner {
   authentications?: string[];
   typeMessaging?: string[];
   positioningMode?: string;
+  personal_identifier?: string;
+  personal_identifier_type?: string;
   signatureConfig?: {
     mode: string;
   };
@@ -111,10 +113,13 @@ export class BryEasySignService {
     documentBase64: string,
     documentName: string,
     signerName: string,
-    signerEmail: string
+    signerEmail: string,
+    personalIdentifier: string,
+    personalIdentifierType: string = 'CPF'
   ): Promise<{ requestId: string; documentNonce: string; signatureLink: string }> {
     console.info(`[BryEasySignService] Criando requisição de assinatura para: ${documentName}`);
     console.info(`[BryEasySignService] Signer: ${signerName} (${signerEmail})`);
+    console.info(`[BryEasySignService] CPF: ${personalIdentifier}`);
     console.info(`[BryEasySignService] Base64 length: ${documentBase64.length}`);
 
     // const stampImageBase64 = await this.generateStampImage(signerName);
@@ -128,9 +133,11 @@ export class BryEasySignService {
           signerNonce: 'funcionario-01',
           name: signerName.toUpperCase(),
           email: signerEmail.toLowerCase(),
-          authentications: ['SELFIE', 'IP'],
+          authentications: ['SELFIE', 'LIVENESS', 'IP'],
           typeMessaging: ['LINK'],
           positioningMode: 'PRESET',
+          personal_identifier: personalIdentifier,
+          personal_identifier_type: personalIdentifierType,
           signatureConfig: {
             mode: 'SIMPLE'
           },
@@ -146,10 +153,10 @@ export class BryEasySignService {
               signerNonce: 'funcionario-01',
               // imageNonce removido
               page: 1,
-              x: 100,
-              y: 100,
-              width: 80,
-              height: 30,
+              x: 130,
+              y: 150,
+              width: 60,
+              height: 20,
             }
           ],
         },
