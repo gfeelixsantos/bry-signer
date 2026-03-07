@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { createSignatureRequest } from '@/actions/easySignActions';
+import { useState, useEffect, useRef } from 'react';
+import { createSignatureRequest, checkSignatureStatus } from '@/actions/easySignActions';
 
 type Step = 'form' | 'camera' | 'downloading' | 'complete';
 
@@ -16,6 +16,43 @@ export default function EasySignPage() {
   const [signatureLink, setSignatureLink] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [isSignatureComplete, setIsSignatureComplete] = useState(false);
+  const [envelopeStatus, setEnvelopeStatus] = useState('');
+  const [signerStatus, setSignerStatus] = useState('');
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  const checkStatus = async () => {
+    if (!requestId) return;
+    
+    const result = await checkSignatureStatus(requestId);
+    
+    if (result.success) {
+      setEnvelopeStatus(result.status || '');
+      setSignerStatus(result.signerStatus || '');
+      
+      if (result.isComplete) {
+        setIsSignatureComplete(true);
+        if (pollingIntervalRef.current) {
+          clearInterval(pollingIntervalRef.current);
+          pollingIntervalRef.current = null;
+        }
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (step === 'camera' && requestId && !isSignatureComplete) {
+      checkStatus();
+      
+      pollingIntervalRef.current = setInterval(checkStatus, 3000);
+    }
+
+    return () => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+      }
+    };
+  }, [step, requestId]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -84,7 +121,7 @@ export default function EasySignPage() {
     setStep('complete');
   };
 
-  const resetFlow = () => {
+const resetFlow = () => {
     setStep('form');
     setSignerName('');
     setSignerEmail('');
@@ -94,6 +131,13 @@ export default function EasySignPage() {
     setDocumentNonce('');
     setSignatureLink('');
     setError('');
+    setIsSignatureComplete(false);
+    setEnvelopeStatus('');
+    setSignerStatus('');
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+      pollingIntervalRef.current = null;
+    }
   };
 
   return (
@@ -180,7 +224,7 @@ export default function EasySignPage() {
             </form>
           )}
 
-          {step === 'camera' && (
+{step === 'camera' && (
             <div className="space-y-6">
               <div className="text-center">
                 <h2 className="text-2xl font-semibold text-gray-800">
@@ -201,15 +245,29 @@ export default function EasySignPage() {
               />
 
               <div className="border-t border-gray-200 pt-6">
-                <p className="text-gray-600 mb-4 text-center">
-                  Já realizou a assinatura?
-                </p>
+                <div className="bg-gray-50 rounded-lg p-4 mb-4">
+                  <p className="text-sm text-center text-gray-600">
+                    Status: <span className="font-medium">Envelope: {envelopeStatus || 'PENDING'}</span> | 
+                    Assinante: <span className="font-medium">{signerStatus || 'PENDING'}</span>
+                  </p>
+                  {!isSignatureComplete && (
+                    <p className="text-xs text-center text-amber-600 mt-2">
+                      Aguarde a conclusão da assinatura facial...
+                    </p>
+                  )}
+                  {isSignatureComplete && (
+                    <p className="text-xs text-center text-green-600 mt-2">
+                      Assinatura concluída! Agora você pode baixar o documento.
+                    </p>
+                  )}
+                </div>
+                
                 <button
                   onClick={handleCheckSignature}
-                  disabled={loading}
-                  className="w-full bg-emerald-600 text-white py-3 px-6 rounded-lg font-medium hover:bg-emerald-700 disabled:opacity-50 transition-colors"
+                  disabled={loading || !isSignatureComplete}
+                  className="w-full bg-emerald-600 text-white py-3 px-6 rounded-lg font-medium hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
-                  {loading ? 'Baixando...' : 'Já tirei a Selfie e Assinei! (Baixar PDF)'}
+                  {loading ? 'Baixando...' : isSignatureComplete ? 'Baixar PDF Assinado' : 'Aguarde a assinatura ser concluída...'}
                 </button>
               </div>
             </div>

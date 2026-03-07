@@ -35,11 +35,13 @@ interface EasySignRequest {
 
 interface EasySignResponse {
   uuid: string;
+  status?: string;
   documents: Array<{
     documentNonce: string;
     documentUuid?: string;
   }>;
   signers: Array<{
+    status?: string;
     link?: {
       url: string;
     };
@@ -208,10 +210,39 @@ signatureConfig: {
       throw new Error(`Falha ao obter documento assinado: ${response.status}`);
     }
 
-    const arrayBuffer = await response.arrayBuffer();
+const arrayBuffer = await response.arrayBuffer();
     console.info(`[BryEasySignService] Documento assinado recebido, tamanho: ${arrayBuffer.byteLength} bytes`);
 
     return arrayBuffer;
+  }
+
+  async getSignatureStatus(requestId: string): Promise<{ status: string; signerStatus: string }> {
+    console.info(`[BryEasySignService] Verificando status da assinatura: ${requestId}`);
+
+    const token = await bryAuthService.getAccessToken();
+    const url = `${this.getEasySignUrl()}/signatures/${requestId}`;
+
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`[BryEasySignService] Erro ao verificar status: ${errorText}`);
+      throw new Error(`Falha ao verificar status: ${response.status}`);
+    }
+
+    const data = await response.json() as EasySignResponse;
+    const envelopeStatus = data.status || 'UNKNOWN';
+    const signerStatus = data.signers?.[0]?.status || 'UNKNOWN';
+
+    console.info(`[BryEasySignService] Status: envelope=${envelopeStatus}, signer=${signerStatus}`);
+
+    return { status: envelopeStatus, signerStatus };
   }
 }
 

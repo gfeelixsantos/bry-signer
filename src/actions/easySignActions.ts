@@ -39,4 +39,33 @@ export async function createSignatureRequest(
   }
 }
 
+export async function checkSignatureStatus(
+  requestId: string
+): Promise<{
+  success: boolean;
+  status?: string;
+  signerStatus?: string;
+  isComplete?: boolean;
+  error?: string;
+}> {
+  try {
+    const result = await bryEasySignService.getSignatureStatus(requestId);
+    
+    const isComplete = 
+      result.status === 'FINISHED' && 
+      (result.signerStatus === 'SIGNED' || result.signerStatus === 'CONCLUDED');
+
+    return {
+      success: true,
+      status: result.status,
+      signerStatus: result.signerStatus,
+      isComplete,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Erro desconhecido';
+    console.error(`[EasySignAction] Erro ao verificar status: ${message}`);
+    return { success: false, error: message };
+  }
+}
+
 
