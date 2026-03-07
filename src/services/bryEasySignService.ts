@@ -8,7 +8,7 @@ interface EasySignDocument {
 interface EasySignSigner {
   name: string;
   email: string;
-  authentications?: string[];
+  authenticationOptions?: string[];
   typeMessaging?: string[];
   positioningMode?: string;
   signatureConfig?: {
@@ -122,20 +122,11 @@ const payload: EasySignRequest = {
         {
           name: signerName.toUpperCase(),
           email: signerEmail.toLowerCase(),
-          authentications: ['SELFIE', 'LIVENESS'],
+          authenticationOptions: ['SELFIE', 'LIVENESS'],
           typeMessaging: ['LINK'],
-          positioningMode: 'CREATOR',
+          positioningMode: 'SIGNEE',
           signatureConfig: {
-            mode: 'SIMPLE',
-            visualRepresentation: {
-              position: {
-                page: 1,
-                x: 350,
-                y: 100,
-                width: 200,
-                height: 60,
-              },
-            },
+            mode: 'SIMPLE'
           },
         },
       ],
