@@ -126,7 +126,16 @@ const payload: EasySignRequest = {
           typeMessaging: ['LINK'],
           positioningMode: 'SIGNEE',
           signatureConfig: {
-            mode: 'SIMPLE'
+            mode: 'SIMPLE',
+            visualRepresentation: {
+              position: {
+                page: 1,
+                x: 350,
+                y: 100,
+                width: 200,
+                height: 60,
+              },
+            },
           },
         },
       ],
