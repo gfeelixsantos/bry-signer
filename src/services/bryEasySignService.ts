@@ -122,6 +122,9 @@ export class BryEasySignService {
     console.info(`[BryEasySignService] CPF: ${personalIdentifier}`);
     console.info(`[BryEasySignService] Base64 length: ${documentBase64.length}`);
 
+    // Remove caracteres não numéricos do CPF
+    const cleanPersonalIdentifier = personalIdentifier.replace(/\D/g, '');
+
     // const stampImageBase64 = await this.generateStampImage(signerName);
 
     const payload: EasySignRequest = {
@@ -135,8 +138,8 @@ export class BryEasySignService {
           email: signerEmail.toLowerCase(),
           authentications: ['SELFIE', 'LIVENESS', 'IP'],
           typeMessaging: ['LINK'],
-          positioningMode: 'PRESET',
-          personal_identifier: personalIdentifier,
+          positioningMode: 'CREATOR',
+          personal_identifier: cleanPersonalIdentifier,
           personal_identifier_type: personalIdentifierType,
           signatureConfig: {
             mode: 'SIMPLE'
@@ -154,7 +157,7 @@ export class BryEasySignService {
               // imageNonce removido
               page: 1,
               x: 120,
-              y: 20,
+              y: 10,
               width: 80,
               height: 30,
             }
