@@ -48,16 +48,16 @@ export async function generateIntegrationLink(
   }
 }
 
-export async function checkSavedPscToken(): Promise<{ success: boolean; token?: string; error?: string }> {
+export async function checkSavedPscToken(): Promise<{ success: boolean; token?: string; isValid?: boolean; error?: string }> {
   try {
     console.info('[ServerAction] Verificando se existe token PSC salvo...');
     const result = await getPscToken();
 
-    if (result && result.token_psc) {
-      return { success: true, token: result.token_psc };
+    if (result) {
+      return { success: true, token: result.token, isValid: result.isValid };
     }
 
-    return { success: true, token: undefined };
+    return { success: true, token: undefined, isValid: false };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Erro desconhecido';
     console.error(`[ServerAction] Erro ao buscar token: ${message}`);

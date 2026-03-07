@@ -125,13 +125,13 @@ export class BryEasySignService {
           authentications: ['SELFIE', 'LIVENNESS'],
           typeMessaging: ['LINK'],
           positioningMode: 'CREATOR',
-          signatureConfig: {
+signatureConfig: {
             mode: 'SIMPLE',
             visualRepresentation: {
               position: {
                 page: 1,
                 x: 350,
-                y: 700,
+                y: 50,
                 width: 200,
                 height: 60,
               },

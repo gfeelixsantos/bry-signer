@@ -94,6 +94,12 @@ export default function Signer() {
       return;
     }
 
+    if (hasPersistedToken && kmsToken) {
+      setStep('signing');
+      await performSignature();
+      return;
+    }
+
     setLoading(true);
     setError('');
     try {
