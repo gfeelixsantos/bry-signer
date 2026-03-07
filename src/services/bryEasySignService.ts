@@ -124,7 +124,7 @@ const payload: EasySignRequest = {
           email: signerEmail.toLowerCase(),
           authentications: ['SELFIE', 'LIVENESS'],
           typeMessaging: ['LINK'],
-          positioningMode: 'SIGNEE',
+          positioningMode: 'CREATOR',
           signatureConfig: {
             mode: 'SIMPLE',
             visualRepresentation: {
