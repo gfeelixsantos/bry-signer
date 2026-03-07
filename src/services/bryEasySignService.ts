@@ -12,7 +12,7 @@ interface EasySignDocument {
   base64Document: string;
   signaturePositions?: Array<{
     signerNonce: string;
-    imageNonce: string;
+    imageNonce?: string;
     page: number;
     x: number;
     y: number;
@@ -143,25 +143,20 @@ export class BryEasySignService {
     console.info(`[BryEasySignService] Signer: ${signerName} (${signerEmail})`);
     console.info(`[BryEasySignService] Base64 length: ${documentBase64.length}`);
 
-    const stampImageBase64 = await this.generateStampImage(signerName);
+    // const stampImageBase64 = await this.generateStampImage(signerName);
 
-const payload: EasySignRequest = {
+    const payload: EasySignRequest = {
       name: 'Assinatura Facial do Funcionario',
       clientName: 'Sistema Interno',
-      images: [
-        {
-          imageNonce: 'logo-empresa',
-          image: stampImageBase64,
-        }
-      ],
+      // images: [], // Imagem removida conforme solicitação
       signersData: [
         {
           signerNonce: 'funcionario-01',
           name: signerName.toUpperCase(),
           email: signerEmail.toLowerCase(),
-          authenticationOptions: ['SELFIE'],
+          authentications: ['SELFIE'],
           typeMessaging: ['LINK'],
-          positioningMode: 'CREATOR',
+          positioningMode: 'PRESET',
           signatureConfig: {
             mode: 'SIMPLE'
           },
@@ -174,12 +169,12 @@ const payload: EasySignRequest = {
           signaturePositions: [
             {
               signerNonce: 'funcionario-01',
-              imageNonce: 'logo-empresa',
+              // imageNonce removido
               page: 1,
-              x: 50,
-              y: 650,
-              width: 200,
-              height: 80,
+              x: 100,
+              y: 100,
+              width: 80,
+              height: 30,
             }
           ],
         },
@@ -187,8 +182,7 @@ const payload: EasySignRequest = {
     };
 
     console.info(`[BryEasySignService] Verificando estrutura do payload antes de enviar...`);
-    console.log('[BryEasySignService] Stamp image length:', stampImageBase64.length);
-    console.log('[BryEasySignService] Stamp image prefix:', stampImageBase64.substring(0, 50));
+    // console.log('[BryEasySignService] Stamp image length:', stampImageBase64.length);
     
     const payloadStr = JSON.stringify(payload);
     console.log('[BryEasySignService] Payload signersData:', JSON.stringify(payload.signersData));
