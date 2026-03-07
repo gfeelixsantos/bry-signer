@@ -4,7 +4,7 @@ import * as path from 'path';
 
 interface EasySignImage {
   nonce: string;
-  base64: string;
+  image: string;
 }
 
 interface EasySignDocument {
@@ -13,13 +13,11 @@ interface EasySignDocument {
   signaturePositions?: Array<{
     signerNonce: string;
     imageNonce: string;
-    position: {
-      page: number;
-      x: number;
-      y: number;
-      width: number;
-      height: number;
-    };
+    page: number;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
   }>;
 }
 
@@ -27,6 +25,7 @@ interface EasySignSigner {
   nonce?: string;
   name: string;
   email: string;
+  authentications?: string[];
   authenticationOptions?: string[];
   typeMessaging?: string[];
   positioningMode?: string;
@@ -152,7 +151,7 @@ const payload: EasySignRequest = {
       images: [
         {
           nonce: 'logo-empresa',
-          base64: stampImageBase64,
+          image: stampImageBase64,
         }
       ],
       signersData: [
@@ -176,13 +175,11 @@ const payload: EasySignRequest = {
             {
               signerNonce: 'funcionario-01',
               imageNonce: 'logo-empresa',
-              position: {
-                page: 1,
-                x: 50,
-                y: 650,
-                width: 200,
-                height: 80,
-              },
+              page: 1,
+              x: 50,
+              y: 650,
+              width: 200,
+              height: 80,
             }
           ],
         },
