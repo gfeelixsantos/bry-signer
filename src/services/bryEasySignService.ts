@@ -1,13 +1,7 @@
 import { bryAuthService } from './bryAuthService';
-import * as fs from 'fs';
-import * as path from 'path';
-
-interface EasySignImage {
-  imageNonce: string;
-  image: string;
-}
 
 interface EasySignDocument {
+  documentNonce: string;
   name: string;
   base64Document: string;
   signaturePositions?: Array<{
@@ -26,7 +20,6 @@ interface EasySignSigner {
   name: string;
   email: string;
   authentications?: string[];
-  authenticationOptions?: string[];
   typeMessaging?: string[];
   positioningMode?: string;
   signatureConfig?: {
@@ -37,7 +30,6 @@ interface EasySignSigner {
 interface EasySignRequest {
   name: string;
   clientName: string;
-  images?: EasySignImage[];
   signersData: EasySignSigner[];
   documents: EasySignDocument[];
 }
@@ -68,24 +60,6 @@ export class BryEasySignService {
       throw new Error('BRY_EASYSIGN_URL não configurada');
     }
     return url;
-  }
-
-  private async generateStampImage(signerName: string): Promise<string> {
-    try {
-      console.info(`[BryEasySignService] Carregando imagem do carimbo para: ${signerName}`);
-
-      const imagePath = path.join(process.cwd(), 'src', 'services', 'logo-cmso.png');
-      const imageBuffer = fs.readFileSync(imagePath);
-      const logoBase64 = imageBuffer.toString('base64');
-
-      console.info(`[BryEasySignService] Logo base64 length: ${logoBase64.length}`);
-      console.info(`[BryEasySignService] Imagem do carimbo carregada com sucesso`);
-
-      return logoBase64;
-    } catch (error) {
-      console.error(`[BryEasySignService] Erro ao carregar imagem do carimbo:`, error);
-      throw new Error('Falha ao carregar imagem do carimbo');
-    }
   }
 
   private async makeAuthenticatedRequest(
@@ -154,7 +128,7 @@ export class BryEasySignService {
           signerNonce: 'funcionario-01',
           name: signerName.toUpperCase(),
           email: signerEmail.toLowerCase(),
-          authentications: ['SELFIE'],
+          authentications: ['SELFIE', 'IP'],
           typeMessaging: ['LINK'],
           positioningMode: 'PRESET',
           signatureConfig: {
@@ -164,6 +138,7 @@ export class BryEasySignService {
       ],
       documents: [
         {
+          documentNonce: 'doc-01',
           name: documentName,
           base64Document: documentBase64,
           signaturePositions: [
