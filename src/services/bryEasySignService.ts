@@ -116,24 +116,23 @@ export class BryEasySignService {
     console.info(`[BryEasySignService] Signer: ${signerName} (${signerEmail})`);
     console.info(`[BryEasySignService] Base64 length: ${documentBase64.length}`);
 
-    const payload: EasySignRequest = {
+const payload: EasySignRequest = {
       name: 'Assinatura Facial do Funcionario',
       clientName: 'Sistema Interno',
       signersData: [
         {
           name: signerName.toUpperCase(),
           email: signerEmail.toLowerCase(),
-          authenticationOptions: ['SELFIE', 'LIVENESS'],
-          authentications: ['SELFIE', 'LIVENNESS'],
+          authentications: ['SELFIE', 'LIVENESS'],
           typeMessaging: ['LINK'],
-          positioningMode: 'CREATOR',
-signatureConfig: {
+          positioningMode: 'PRESET',
+          signatureConfig: {
             mode: 'SIMPLE',
             visualRepresentation: {
               position: {
                 page: 1,
                 x: 350,
-                y: 50,
+                y: 100,
                 width: 200,
                 height: 60,
               },
