@@ -19,7 +19,7 @@ export async function GET(request: Request) {
         console.log("Token para Download:", accessToken ? "Presente" : "Vazio/Undefined");
 
         // 3. Monta a chamada para a BRy
-        const bryUrl = `https://easysign.bry.com.br/api/service/sign/v1/signatures/${requestId}/documents/${documentNonce}/signed?returnType=BINARY`;
+        const bryUrl = `https://easysign.hom.bry.com.br/api/service/sign/v1/signatures/${requestId}/documents/${documentNonce}/signed?returnType=BINARY`;
 
         const response = await fetch(bryUrl, {
             method: 'GET',

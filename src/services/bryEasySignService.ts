@@ -10,6 +10,19 @@ interface EasySignSigner {
   email: string;
   authentications: string[];
   typeMessaging?: string[];
+  positioningMode?: string;
+  signatureConfig?: {
+    mode: string;
+    visualRepresentation?: {
+      position: {
+        page: number;
+        x: number;
+        y: number;
+        width: number;
+        height: number;
+      };
+    };
+  };
 }
 
 interface EasySignRequest {
@@ -106,8 +119,21 @@ export class BryEasySignService {
         {
           name: signerName.toUpperCase(),
           email: signerEmail.toLowerCase(),
-          authentications: ['SELFIE'],
+          authentications: ['SELFIE', 'LIVENESS'],
           typeMessaging: ['LINK'],
+          positioningMode: 'CREATOR',
+          signatureConfig: {
+            mode: 'SIMPLE',
+            visualRepresentation: {
+              position: {
+                page: 1,
+                x: 350,
+                y: 700,
+                width: 200,
+                height: 60,
+              },
+            },
+          },
         },
       ],
       documents: [
