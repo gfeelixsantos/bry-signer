@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 interface EasySignImage {
-  nonce: string;
+  imageNonce: string;
   image: string;
 }
 
@@ -22,7 +22,7 @@ interface EasySignDocument {
 }
 
 interface EasySignSigner {
-  nonce?: string;
+  signerNonce?: string;
   name: string;
   email: string;
   authentications?: string[];
@@ -150,13 +150,13 @@ const payload: EasySignRequest = {
       clientName: 'Sistema Interno',
       images: [
         {
-          nonce: 'logo-empresa',
+          imageNonce: 'logo-empresa',
           image: stampImageBase64,
         }
       ],
       signersData: [
         {
-          nonce: 'funcionario-01',
+          signerNonce: 'funcionario-01',
           name: signerName.toUpperCase(),
           email: signerEmail.toLowerCase(),
           authenticationOptions: ['SELFIE'],
