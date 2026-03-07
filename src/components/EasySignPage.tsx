@@ -9,7 +9,7 @@ export default function EasySignPage() {
   const [step, setStep] = useState<Step>('form');
   const [signerName, setSignerName] = useState('Gabriel Teste Facial');
   const [signerEmail, setSignerEmail] = useState('esocial@cmsocupacional.com.br');
-  const [personalIdentifier, setPersonalIdentifier] = useState('428.891.788.38');
+  const [personalIdentifier, setPersonalIdentifier] = useState('428.891.788-38');
   const [personalIdentifierType, setPersonalIdentifierType] = useState('CPF');
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [pdfBase64, setPdfBase64] = useState('');
@@ -55,6 +55,24 @@ export default function EasySignPage() {
       }
     };
   }, [step, requestId]);
+
+  const formatCPF = (value: string) => {
+    const numbers = value.replace(/\D/g, '');
+    return numbers
+      .replace(/(\d{3})(\d)/, '$1.$2')
+      .replace(/(\d{3})(\d)/, '$1.$2')
+      .replace(/(\d{3})(\d{1,2})/, '$1-$2')
+      .replace(/(-\d{2})\d+?$/, '$1');
+  };
+
+  const handlePersonalIdentifierChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    if (personalIdentifierType === 'CPF') {
+      setPersonalIdentifier(formatCPF(value));
+    } else {
+      setPersonalIdentifier(value);
+    }
+  };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -216,6 +234,39 @@ const resetFlow = () => {
                   placeholder="Digite o nome completo"
                   disabled={loading}
                 />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    CPF do Funcionário
+                  </label>
+                  <input
+                    type="text"
+                    value={personalIdentifier}
+                    onChange={handlePersonalIdentifierChange}
+                    maxLength={personalIdentifierType === 'CPF' ? 14 : undefined}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-black"
+                    placeholder="000.000.000-00"
+                    disabled={loading}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Tipo de Documento
+                  </label>
+                  <select
+                    value={personalIdentifierType}
+                    onChange={(e) => setPersonalIdentifierType(e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-black bg-white"
+                    disabled={loading}
+                  >
+                    <option value="CPF">CPF</option>
+                    <option value="CNPJ">CNPJ</option>
+                    <option value="RG">RG</option>
+                    <option value="PASSAPORTE">Passaporte</option>
+                  </select>
+                </div>
               </div>
 
               <div>
