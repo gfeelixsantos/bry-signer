@@ -150,7 +150,7 @@ const payload: EasySignRequest = {
         {
           name: signerName.toUpperCase(),
           email: signerEmail.toLowerCase(),
-          authenticationOptions: ['SELFIE', 'LIVENNESS'],
+          authenticationOptions: ['SELFIE'],
           typeMessaging: ['LINK'],
           positioningMode: 'CREATOR',
           signatureConfig: {
