@@ -193,9 +193,9 @@ export default function EasySignPage() {
 
               <iframe
                 src={signatureLink}
+                allow="camera"
                 width="100%"
-                height="600px"
-                allow="camera; microphone"
+                height="600"
                 frameBorder="0"
                 className="rounded-lg border border-gray-300"
               />

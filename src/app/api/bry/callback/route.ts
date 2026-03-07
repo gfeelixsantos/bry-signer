@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { setSessionValidated } from '@/services/sessionManager';
+import { savePscToken } from '@/services/pscTokenStorage';
 
 const HTML_RESPONSE = `<!DOCTYPE html>
 <html>
@@ -61,8 +62,9 @@ const HTML_RESPONSE = `<!DOCTYPE html>
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const state = searchParams.get('state');
+  const token = searchParams.get('token');
 
-  console.info(`[Callback] Recebido callback com state: ${state}`);
+  console.info(`[Callback] Recebido callback com state: ${state} e token presente: ${!!token}`);
 
   if (!state) {
     console.error('[Callback] State não fornecido');
@@ -70,6 +72,12 @@ export async function GET(request: NextRequest) {
       '<html><body><h1>Erro</h1><p>Parâmetro state não fornecido.</p></body></html>',
       { status: 400, headers: { 'Content-Type': 'text/html' } }
     );
+  }
+
+  if (token) {
+    await savePscToken(state, token);
+  } else {
+    console.warn('[Callback] Token não foi retornado pelo PSC na URL.');
   }
 
   setSessionValidated(state);

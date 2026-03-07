@@ -18,8 +18,13 @@ export async function GET(request: Request) {
         // DIAGNÓSTICO CRÍTICO: Imprime o token para garantir que ele existe antes da chamada
         console.log("Token para Download:", accessToken ? "Presente" : "Vazio/Undefined");
 
+        const bryEasySignUrl = process.env.BRY_EASYSIGN_URL;
+        if (!bryEasySignUrl) {
+            throw new Error('BRY_EASYSIGN_URL não configurada no ambiente');
+        }
+
         // 3. Monta a chamada para a BRy
-        const bryUrl = `https://easysign.hom.bry.com.br/api/service/sign/v1/signatures/${requestId}/documents/${documentNonce}/signed?returnType=BINARY`;
+        const bryUrl = `${bryEasySignUrl}/signatures/${requestId}/documents/${documentNonce}/signed?returnType=BINARY`;
 
         const response = await fetch(bryUrl, {
             method: 'GET',

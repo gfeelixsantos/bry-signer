@@ -8,7 +8,8 @@ interface EasySignDocument {
 interface EasySignSigner {
   name: string;
   email: string;
-  authentications: string[];
+  authenticationOptions?: string[];
+  authentications?: string[];
   typeMessaging?: string[];
   positioningMode?: string;
   signatureConfig?: {
@@ -36,6 +37,7 @@ interface EasySignResponse {
   uuid: string;
   documents: Array<{
     documentNonce: string;
+    documentUuid?: string;
   }>;
   signers: Array<{
     link?: {
@@ -112,14 +114,15 @@ export class BryEasySignService {
     console.info(`[BryEasySignService] Signer: ${signerName} (${signerEmail})`);
     console.info(`[BryEasySignService] Base64 length: ${documentBase64.length}`);
 
-    const requestBody: EasySignRequest = {
+    const payload: EasySignRequest = {
       name: 'Assinatura Facial do Funcionario',
       clientName: 'Sistema Interno',
       signersData: [
         {
           name: signerName.toUpperCase(),
           email: signerEmail.toLowerCase(),
-          authentications: ['SELFIE', 'LIVENESS'],
+          authenticationOptions: ['SELFIE', 'LIVENESS'],
+          authentications: ['SELFIE', 'LIVENNESS'],
           typeMessaging: ['LINK'],
           positioningMode: 'CREATOR',
           signatureConfig: {
@@ -144,18 +147,19 @@ export class BryEasySignService {
       ],
     };
 
-    console.info(`[BryEasySignService] Payload:`, JSON.stringify(requestBody));
+    console.info(`[BryEasySignService] Verificando estrutura do payload antes de enviar...`);
+    console.log(JSON.stringify(payload));
 
     const response = await this.makeAuthenticatedRequest('/signatures', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(requestBody),
+      body: JSON.stringify(payload),
     }) as EasySignResponse;
 
     const requestId = response.uuid;
-    const documentNonce = response.documents?.[0]?.documentNonce;
+    const documentNonce = response.documents?.[0]?.documentNonce || response.documents?.[0]?.documentUuid;
     const signatureLink = response.signers?.[0]?.iframe?.href;
 
     if (!signatureLink) {
@@ -163,8 +167,13 @@ export class BryEasySignService {
       throw new Error('Link de assinatura não retornado. Verifique o typeMessaging.');
     }
 
+    if (!documentNonce) {
+      console.error('[BryEasySignService] Payload do documents retornado:', JSON.stringify(response.documents));
+      throw new Error('ID do documento não retornado.');
+    }
+
     console.info(`[BryEasySignService] Request ID: ${requestId}`);
-    console.info(`[BryEasySignService] Document Nonce: ${documentNonce}`);
+    console.info(`[BryEasySignService] Document ID: ${documentNonce}`);
     console.info(`[BryEasySignService] Signature Link: ${signatureLink}`);
 
     return {

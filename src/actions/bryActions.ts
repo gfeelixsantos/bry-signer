@@ -2,6 +2,7 @@
 
 import { bryClient } from '@/services/bryClient';
 import { createSession } from '@/services/sessionManager';
+import { getPscToken } from '@/services/pscTokenStorage';
 
 function generateUUID(): string {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
@@ -43,6 +44,23 @@ export async function generateIntegrationLink(
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Erro desconhecido';
     console.error(`[ServerAction] Erro ao gerar link: ${message}`);
+    return { success: false, error: message };
+  }
+}
+
+export async function checkSavedPscToken(): Promise<{ success: boolean; token?: string; error?: string }> {
+  try {
+    console.info('[ServerAction] Verificando se existe token PSC salvo...');
+    const result = await getPscToken();
+
+    if (result && result.token_psc) {
+      return { success: true, token: result.token_psc };
+    }
+
+    return { success: true, token: undefined };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Erro desconhecido';
+    console.error(`[ServerAction] Erro ao buscar token: ${message}`);
     return { success: false, error: message };
   }
 }

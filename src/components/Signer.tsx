@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { QRCodeSVG } from 'qrcode.react';
-import { listPSCs, generateIntegrationLink } from '@/actions/bryActions';
+import { listPSCs, generateIntegrationLink, checkSavedPscToken } from '@/actions/bryActions';
 
 interface PSC {
   name: string;
@@ -20,12 +20,13 @@ export default function Signer() {
   const [pdfBase64, setPdfBase64] = useState<string>('');
   const [qrCodeUrl, setQrCodeUrl] = useState<string>('');
   const [kmsToken, setKmsToken] = useState<string>('');
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>('');
+  const [hasPersistedToken, setHasPersistedToken] = useState(false);
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
-    loadPSCs();
+    init();
   }, []);
 
   useEffect(() => {
@@ -36,8 +37,25 @@ export default function Signer() {
     };
   }, []);
 
-  const loadPSCs = async () => {
+  const init = async () => {
     setLoading(true);
+    try {
+      const tokenResult = await checkSavedPscToken();
+
+      if (tokenResult.success && tokenResult.token) {
+        setKmsToken(tokenResult.token);
+        setHasPersistedToken(true);
+        setLoading(false);
+      } else {
+        await loadPSCs();
+      }
+    } catch (err) {
+      console.error('Erro na inicialização:', err);
+      await loadPSCs();
+    }
+  };
+
+  const loadPSCs = async () => {
     setError('');
     try {
       const result = await listPSCs();
@@ -58,7 +76,7 @@ export default function Signer() {
     if (file && file.type === 'application/pdf') {
       setPdfFile(file);
       setError('');
-      
+
       const reader = new FileReader();
       reader.onloadend = () => {
         const base64 = (reader.result as string).split(',')[1];
@@ -100,7 +118,7 @@ export default function Signer() {
       try {
         const response = await fetch(`/api/bry/status?state=${state}`);
         const data = await response.json();
-        
+
         if (data.validated) {
           if (pollingRef.current) {
             clearInterval(pollingRef.current);
@@ -120,6 +138,9 @@ export default function Signer() {
       setStep('upload');
       return;
     }
+
+    setStep('signing');
+    setLoading(true);
 
     try {
       const formData = new FormData();
@@ -152,7 +173,17 @@ export default function Signer() {
       const message = err instanceof Error ? err.message : 'Erro ao assinar PDF';
       setError(message);
       setStep('upload');
+    } finally {
+      setLoading(false);
     }
+  };
+
+  const handleSignDirectly = async () => {
+    if (!pdfFile || !pdfBase64) {
+      setError('Faça upload de um PDF primeiro');
+      return;
+    }
+    await performSignature();
   };
 
   const resetFlow = () => {
@@ -160,12 +191,112 @@ export default function Signer() {
     setPdfFile(null);
     setPdfBase64('');
     setQrCodeUrl('');
-    setKmsToken('');
     setError('');
+    // Notice we do NOT clear the kmsToken here if hasPersistedToken is true, 
+    // so the persisted token can be utilized for consecutive signatures without refreshing.
+    if (!hasPersistedToken) {
+      setKmsToken('');
+    }
     if (pollingRef.current) {
       clearInterval(pollingRef.current);
     }
   };
+
+  const renderUploadStep = () => (
+    <div className="space-y-6">
+      {hasPersistedToken ? (
+        <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4 mb-6">
+          <div className="flex items-center">
+            <svg className="w-6 h-6 text-indigo-600 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7"></path></svg>
+            <div>
+              <h3 className="text-sm font-medium text-indigo-800">Sessão Ativa</h3>
+              <p className="text-sm text-indigo-600 mt-1">
+                Uma autorização prévia já foi salva. Você pode assinar diretamente.
+              </p>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Selecione o Provedor de Certificado (PSC)
+          </label>
+          <select
+            value={selectedPsc}
+            onChange={(e) => setSelectedPsc(e.target.value)}
+            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-black"
+            disabled={loading}
+          >
+            <option value="">Selecione um PSC...</option>
+            {pscs.map((psc) => (
+              <option key={psc.name} value={psc.name}>
+                {psc.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          Upload do Documento PDF
+        </label>
+        <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-indigo-500 transition-colors">
+          <input
+            type="file"
+            accept=".pdf"
+            onChange={handleFileChange}
+            className="hidden"
+            id="pdf-upload"
+            disabled={loading}
+          />
+          <label htmlFor="pdf-upload" className="cursor-pointer">
+            {pdfFile ? (
+              <div>
+                <p className="text-green-600 font-medium">{pdfFile.name}</p>
+                <p className="text-gray-500 text-sm">{(pdfFile.size / 1024).toFixed(2)} KB</p>
+              </div>
+            ) : (
+              <div>
+                <p className="text-gray-600">Clique para selecionar um arquivo PDF</p>
+                <p className="text-gray-400 text-sm mt-1">ou arraste e solte aqui</p>
+              </div>
+            )}
+          </label>
+        </div>
+      </div>
+
+      {hasPersistedToken ? (
+        <button
+          onClick={handleSignDirectly}
+          disabled={loading || !pdfFile}
+          className="w-full bg-indigo-600 text-white py-3 px-6 rounded-lg font-medium hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        >
+          {loading ? 'Assinando...' : 'Assinar Documento Diretamente'}
+        </button>
+      ) : (
+        <button
+          onClick={handleGenerateLink}
+          disabled={loading || !selectedPsc || !pdfFile}
+          className="w-full bg-indigo-600 text-white py-3 px-6 rounded-lg font-medium hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        >
+          {loading ? 'Carregando...' : 'Gerar Link de Integração'}
+        </button>
+      )}
+
+      <div className="border-t border-gray-200 pt-6">
+        <p className="text-center text-gray-600 mb-4">
+          Ou utilize outro método de assinatura
+        </p>
+        <Link
+          href="/easysign"
+          className="block w-full bg-teal-600 text-white py-3 px-6 rounded-lg font-medium hover:bg-teal-700 transition-colors text-center"
+        >
+          Assinatura com Selfie (Easy Sign)
+        </Link>
+      </div>
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-500 to-purple-600 py-12 px-4">
@@ -182,77 +313,7 @@ export default function Signer() {
             </div>
           )}
 
-          {step === 'upload' && (
-            <div className="space-y-6">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Selecione o Provedor de Certificado (PSC)
-                </label>
-                <select
-                  value={selectedPsc}
-                  onChange={(e) => setSelectedPsc(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-black"
-                  disabled={loading}
-                >
-                  <option value="">Selecione um PSC...</option>
-                  {pscs.map((psc) => (
-                    <option key={psc.name} value={psc.name}>
-                      {psc.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Upload do Documento PDF
-                </label>
-                <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-indigo-500 transition-colors">
-                  <input
-                    type="file"
-                    accept=".pdf"
-                    onChange={handleFileChange}
-                    className="hidden"
-                    id="pdf-upload"
-                    disabled={loading}
-                  />
-                  <label htmlFor="pdf-upload" className="cursor-pointer">
-                    {pdfFile ? (
-                      <div>
-                        <p className="text-green-600 font-medium">{pdfFile.name}</p>
-                        <p className="text-gray-500 text-sm">{(pdfFile.size / 1024).toFixed(2)} KB</p>
-                      </div>
-                    ) : (
-                      <div>
-                        <p className="text-gray-600">Clique para selecionar um arquivo PDF</p>
-                        <p className="text-gray-400 text-sm mt-1">ou arraste e solte aqui</p>
-                      </div>
-                    )}
-                  </label>
-                </div>
-              </div>
-
-              <button
-                onClick={handleGenerateLink}
-                disabled={loading || !selectedPsc || !pdfFile}
-                className="w-full bg-indigo-600 text-white py-3 px-6 rounded-lg font-medium hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                {loading ? 'Carregando...' : 'Gerar Link de Integração'}
-              </button>
-
-              <div className="border-t border-gray-200 pt-6">
-                <p className="text-center text-gray-600 mb-4">
-                  Ou utilize outro método de assinatura
-                </p>
-                <Link
-                  href="/easysign"
-                  className="block w-full bg-teal-600 text-white py-3 px-6 rounded-lg font-medium hover:bg-teal-700 transition-colors text-center"
-                >
-                  Assinatura com Selfie (Easy Sign)
-                </Link>
-              </div>
-            </div>
-          )}
+          {step === 'upload' && renderUploadStep()}
 
           {step === 'link' && (
             <div className="text-center space-y-6">
@@ -262,7 +323,7 @@ export default function Signer() {
               <p className="text-gray-600">
                 Você será redirecionado para autenticar no provedor de certificado
               </p>
-              
+
               <div className="flex justify-center p-4 bg-white border-2 border-indigo-100 rounded-xl inline-block">
                 <QRCodeSVG value={qrCodeUrl} size={250} level="M" />
               </div>

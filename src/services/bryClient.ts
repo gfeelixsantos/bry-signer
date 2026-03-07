@@ -101,7 +101,7 @@ class BryClient {
       pscName,
       redirectUri: `${this.getAppUrl()}/api/bry/callback`,
       state,
-      scope: 'single_signature',
+      scope: 'signature_session',
     };
 
     console.info(`[BryClient] Request body:`, JSON.stringify(body));
