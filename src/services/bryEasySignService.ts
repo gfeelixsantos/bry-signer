@@ -1,0 +1,183 @@
+import { bryAuthService } from './bryAuthService';
+
+interface EasySignDocument {
+  name: string;
+  base64Document: string;
+}
+
+interface EasySignSigner {
+  name: string;
+  email: string;
+  authentications: string[];
+  typeMessaging?: string[];
+}
+
+interface EasySignRequest {
+  name: string;
+  clientName: string;
+  signersData: EasySignSigner[];
+  documents: EasySignDocument[];
+}
+
+interface EasySignResponse {
+  uuid: string;
+  documents: Array<{
+    documentNonce: string;
+  }>;
+  signers: Array<{
+    link?: {
+      url: string;
+    };
+    iframe?: {
+      url: string;
+      href: string;
+    };
+  }>;
+}
+
+export class BryEasySignService {
+  private getEasySignUrl(): string {
+    const url = process.env.BRY_EASYSIGN_URL;
+    if (!url) {
+      throw new Error('BRY_EASYSIGN_URL não configurada');
+    }
+    return url;
+  }
+
+  private async makeAuthenticatedRequest(
+    endpoint: string,
+    options: RequestInit = {}
+  ): Promise<unknown> {
+    const token = await bryAuthService.getAccessToken();
+    const url = `${this.getEasySignUrl()}${endpoint}`;
+
+    console.info(`[BryEasySignService] Request: ${options.method || 'GET'} ${url}`);
+    console.info(`[BryEasySignService] Headers: Authorization: Bearer ${token.substring(0, 20)}...`);
+
+    try {
+      const response = await fetch(url, {
+        ...options,
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          ...options.headers,
+        },
+      });
+
+      console.info(`[BryEasySignService] Response Status: ${response.status}`);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`[BryEasySignService] Erro na requisição: ${errorText}`);
+        throw new Error(`Erro na API EasySign: ${response.status} - ${errorText}`);
+      }
+
+      const contentType = response.headers.get('content-type');
+      if (contentType?.includes('application/json')) {
+        const jsonData = await response.json();
+        console.info(`[BryEasySignService] Response JSON:`, JSON.stringify(jsonData).substring(0, 500));
+        return jsonData;
+      }
+
+      return null;
+    } catch (error) {
+      if (error instanceof Error) {
+        console.error(`[BryEasySignService] Erro: ${error.message}`);
+        throw error;
+      }
+      console.error(`[BryEasySignService] Erro desconhecido:`, error);
+      throw new Error('Falha na comunicação com a API EasySign');
+    }
+  }
+
+  async createSignatureRequest(
+    documentBase64: string,
+    documentName: string,
+    signerName: string,
+    signerEmail: string
+  ): Promise<{ requestId: string; documentNonce: string; signatureLink: string }> {
+    console.info(`[BryEasySignService] Criando requisição de assinatura para: ${documentName}`);
+    console.info(`[BryEasySignService] Signer: ${signerName} (${signerEmail})`);
+    console.info(`[BryEasySignService] Base64 length: ${documentBase64.length}`);
+
+    const requestBody: EasySignRequest = {
+      name: 'Assinatura Facial do Funcionario',
+      clientName: 'Sistema Interno',
+      signersData: [
+        {
+          name: signerName.toUpperCase(),
+          email: signerEmail.toLowerCase(),
+          authentications: ['SELFIE'],
+          typeMessaging: ['LINK'],
+        },
+      ],
+      documents: [
+        {
+          name: documentName,
+          base64Document: documentBase64,
+        },
+      ],
+    };
+
+    console.info(`[BryEasySignService] Payload:`, JSON.stringify(requestBody));
+
+    const response = await this.makeAuthenticatedRequest('/signatures', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(requestBody),
+    }) as EasySignResponse;
+
+    const requestId = response.uuid;
+    const documentNonce = response.documents?.[0]?.documentNonce;
+    const signatureLink = response.signers?.[0]?.iframe?.href;
+
+    if (!signatureLink) {
+      console.error('[BryEasySignService] Payload do signers retornado:', JSON.stringify(response.signers));
+      throw new Error('Link de assinatura não retornado. Verifique o typeMessaging.');
+    }
+
+    console.info(`[BryEasySignService] Request ID: ${requestId}`);
+    console.info(`[BryEasySignService] Document Nonce: ${documentNonce}`);
+    console.info(`[BryEasySignService] Signature Link: ${signatureLink}`);
+
+    return {
+      requestId,
+      documentNonce,
+      signatureLink,
+    };
+  }
+
+  async getSignedDocument(requestId: string, documentNonce: string): Promise<ArrayBuffer> {
+    console.info(`[BryEasySignService] Resgatando documento assinado`);
+    console.info(`[BryEasySignService] Request ID: ${requestId}, Document Nonce: ${documentNonce}`);
+
+    const token = await bryAuthService.getAccessToken();
+    const url = `${this.getEasySignUrl()}/signatures/${requestId}/documents/${documentNonce}/signed?returnType=BINARY`;
+
+    console.info(`[BryEasySignService] Request URL: ${url}`);
+
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Accept': 'application/octet-stream'
+      },
+    });
+
+    console.info(`[BryEasySignService] Response Status: ${response.status}`);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`[BryEasySignService] Erro ao buscar documento assinado: ${errorText}`);
+      throw new Error(`Falha ao obter documento assinado: ${response.status}`);
+    }
+
+    const arrayBuffer = await response.arrayBuffer();
+    console.info(`[BryEasySignService] Documento assinado recebido, tamanho: ${arrayBuffer.byteLength} bytes`);
+
+    return arrayBuffer;
+  }
+}
+
+export const bryEasySignService = new BryEasySignService();
