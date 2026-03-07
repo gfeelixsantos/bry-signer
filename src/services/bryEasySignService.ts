@@ -166,7 +166,7 @@ const payload: EasySignRequest = {
     };
   }
 
-  async getSignedDocument(requestId: string, documentNonce: string): Promise<ArrayBuffer> {
+async getSignedDocument(requestId: string, documentNonce: string): Promise<ArrayBuffer> {
     console.info(`[BryEasySignService] Resgatando documento assinado`);
     console.info(`[BryEasySignService] Request ID: ${requestId}, Document Nonce: ${documentNonce}`);
 
@@ -191,8 +191,39 @@ const payload: EasySignRequest = {
       throw new Error(`Falha ao obter documento assinado: ${response.status}`);
     }
 
-const arrayBuffer = await response.arrayBuffer();
+    const arrayBuffer = await response.arrayBuffer();
     console.info(`[BryEasySignService] Documento assinado recebido, tamanho: ${arrayBuffer.byteLength} bytes`);
+
+    return arrayBuffer;
+  }
+
+  async getEvidenceReport(requestId: string, documentNonce: string): Promise<ArrayBuffer> {
+    console.info(`[BryEasySignService] Resgatando relatório de evidências`);
+    console.info(`[BryEasySignService] Request ID: ${requestId}, Document Nonce: ${documentNonce}`);
+
+    const token = await bryAuthService.getAccessToken();
+    const url = `${this.getEasySignUrl()}/signatures/${requestId}/documents/${documentNonce}/report?returnType=BINARY`;
+
+    console.info(`[BryEasySignService] Request URL: ${url}`);
+
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Accept': 'application/octet-stream'
+      },
+    });
+
+    console.info(`[BryEasySignService] Response Status: ${response.status}`);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`[BryEasySignService] Erro ao buscar relatório: ${errorText}`);
+      throw new Error(`Falha ao obter relatório de evidências: ${response.status}`);
+    }
+
+    const arrayBuffer = await response.arrayBuffer();
+    console.info(`[BryEasySignService] Relatório recebido, tamanho: ${arrayBuffer.byteLength} bytes`);
 
     return arrayBuffer;
   }

@@ -105,20 +105,50 @@ export default function EasySignPage() {
     }
   };
 
-  const handleCheckSignature = () => {
+const handleCheckSignature = async () => {
     if (!requestId || !documentNonce) {
       setError('Dados da assinatura incompletos');
       return;
     }
 
-    // O navegador chama nossa rota interna passando os IDs. 
-    // Nossa rota fará a requisição autenticada e devolverá o arquivo pronto!
-    const urlInterna = `/api/bry/download?requestId=${requestId}&documentNonce=${documentNonce}`;
+    setLoading(true);
 
-    // Isso força o download automático na tela do usuário
-    window.location.href = urlInterna;
+    try {
+      const urlSigned = `/api/bry/download?requestId=${requestId}&documentNonce=${documentNonce}&type=signed`;
+      const urlReport = `/api/bry/download?requestId=${requestId}&documentNonce=${documentNonce}&type=report`;
 
-    setStep('complete');
+      const [signedPdf, evidenceReport] = await Promise.all([
+        fetch(urlSigned).then(res => {
+          if (!res.ok) throw new Error('Erro ao baixar documento assinado');
+          return res.blob();
+        }),
+        fetch(urlReport).then(res => {
+          if (!res.ok) throw new Error('Erro ao baixar relatório de evidências');
+          return res.blob();
+        })
+      ]);
+
+      const signedUrl = window.URL.createObjectURL(signedPdf);
+      const reportUrl = window.URL.createObjectURL(evidenceReport);
+
+      const link1 = document.createElement('a');
+      link1.href = signedUrl;
+      link1.download = 'documento_assinado.pdf';
+      link1.click();
+      window.URL.revokeObjectURL(signedUrl);
+
+      const link2 = document.createElement('a');
+      link2.href = reportUrl;
+      link2.download = 'relatorio_evidencias.pdf';
+      link2.click();
+      window.URL.revokeObjectURL(reportUrl);
+
+      setStep('complete');
+    } catch {
+      setError('Erro ao baixar os arquivos. Tente novamente.');
+    } finally {
+      setLoading(false);
+    }
   };
 
 const resetFlow = () => {
