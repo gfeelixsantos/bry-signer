@@ -19,7 +19,7 @@ interface EasySignSigner {
   signerNonce?: string;
   name: string;
   email: string;
-  authentications?: string[];
+  authenticationOptions?: string[];
   typeMessaging?: string[];
   positioningMode?: string;
   personal_identifier?: string;
@@ -130,15 +130,18 @@ export class BryEasySignService {
     const payload: EasySignRequest = {
       name: 'Assinatura Facial do Funcionario',
       clientName: 'Sistema Interno',
-      // images: [], // Imagem removida conforme solicitação
       signersData: [
         {
           signerNonce: 'funcionario-01',
           name: signerName.toUpperCase(),
           email: signerEmail.toLowerCase(),
-          authentications: ['SELFIE', 'LIVENESS', 'IP'],
-          typeMessaging: ['LINK'],
-          positioningMode: 'CREATOR',
+          authenticationOptions: [
+            'SELFIE',
+            'LIVENESS', 
+            'IP'
+          ],
+          positioningMode: 'PRESET',
+          typeMessaging: ['LINK', 'EMAIL'],
           personal_identifier: cleanPersonalIdentifier,
           personal_identifier_type: personalIdentifierType,
           signatureConfig: {
@@ -156,10 +159,10 @@ export class BryEasySignService {
               signerNonce: 'funcionario-01',
               // imageNonce removido
               page: 1,
-              x: 120,
+              x: 126,
               y: 10,
               width: 80,
-              height: 30,
+              height: 24,
             }
           ],
         },
