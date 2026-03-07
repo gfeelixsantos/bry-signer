@@ -1,11 +1,30 @@
 import { bryAuthService } from './bryAuthService';
+import * as fs from 'fs';
+import * as path from 'path';
+
+interface EasySignImage {
+  nonce: string;
+  base64: string;
+}
 
 interface EasySignDocument {
   name: string;
   base64Document: string;
+  signaturePositions?: Array<{
+    signerNonce: string;
+    imageNonce: string;
+    position: {
+      page: number;
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+    };
+  }>;
 }
 
 interface EasySignSigner {
+  nonce?: string;
   name: string;
   email: string;
   authenticationOptions?: string[];
@@ -13,24 +32,13 @@ interface EasySignSigner {
   positioningMode?: string;
   signatureConfig?: {
     mode: string;
-    visualRepresentation?: {
-      position: {
-        page: number;
-        x: number;
-        y: number;
-        width: number;
-        height: number;
-      };
-      image?: {
-        base64: string;
-      };
-    };
   };
 }
 
 interface EasySignRequest {
   name: string;
   clientName: string;
+  images?: EasySignImage[];
   signersData: EasySignSigner[];
   documents: EasySignDocument[];
 }
@@ -65,24 +73,19 @@ export class BryEasySignService {
 
   private async generateStampImage(signerName: string): Promise<string> {
     try {
-      console.info(`[BryEasySignService] Gerando imagem do carimbo para: ${signerName}`);
+      console.info(`[BryEasySignService] Carregando imagem do carimbo para: ${signerName}`);
 
-      const logoResponse = await fetch('https://cmsocupacional.com.br/images/logo.png');
-      
-      if (!logoResponse.ok) {
-        throw new Error(`Falha ao baixar logo: ${logoResponse.status}`);
-      }
-      
-      const logoBuffer = await logoResponse.arrayBuffer();
-      const logoBase64 = Buffer.from(logoBuffer).toString('base64');
+      const imagePath = path.join(process.cwd(), 'src', 'services', 'logo-cmso.png');
+      const imageBuffer = fs.readFileSync(imagePath);
+      const logoBase64 = imageBuffer.toString('base64');
 
       console.info(`[BryEasySignService] Logo base64 length: ${logoBase64.length}`);
-      console.info(`[BryEasySignService] Imagem do carimbo gerada com sucesso`);
+      console.info(`[BryEasySignService] Imagem do carimbo carregada com sucesso`);
 
       return logoBase64;
     } catch (error) {
-      console.error(`[BryEasySignService] Erro ao gerar imagem do carimbo:`, error);
-      throw new Error('Falha ao gerar imagem do carimbo');
+      console.error(`[BryEasySignService] Erro ao carregar imagem do carimbo:`, error);
+      throw new Error('Falha ao carregar imagem do carimbo');
     }
   }
 
@@ -146,27 +149,22 @@ export class BryEasySignService {
 const payload: EasySignRequest = {
       name: 'Assinatura Facial do Funcionario',
       clientName: 'Sistema Interno',
+      images: [
+        {
+          nonce: 'logo-empresa',
+          base64: stampImageBase64,
+        }
+      ],
       signersData: [
         {
+          nonce: 'funcionario-01',
           name: signerName.toUpperCase(),
           email: signerEmail.toLowerCase(),
           authenticationOptions: ['SELFIE'],
           typeMessaging: ['LINK'],
           positioningMode: 'CREATOR',
           signatureConfig: {
-            mode: 'SIMPLE',
-            visualRepresentation: {
-              position: {
-                page: 1,
-                x: 50,
-                y: 650,
-                width: 200,
-                height: 80,
-              },
-              image: {
-                base64: stampImageBase64,
-              },
-            },
+            mode: 'SIMPLE'
           },
         },
       ],
@@ -174,6 +172,19 @@ const payload: EasySignRequest = {
         {
           name: documentName,
           base64Document: documentBase64,
+          signaturePositions: [
+            {
+              signerNonce: 'funcionario-01',
+              imageNonce: 'logo-empresa',
+              position: {
+                page: 1,
+                x: 50,
+                y: 650,
+                width: 200,
+                height: 80,
+              },
+            }
+          ],
         },
       ],
     };
