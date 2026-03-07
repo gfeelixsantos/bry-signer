@@ -67,29 +67,18 @@ export class BryEasySignService {
     try {
       console.info(`[BryEasySignService] Gerando imagem do carimbo para: ${signerName}`);
 
-      const today = new Date();
-      const dateStr = today.toLocaleDateString('pt-BR');
-      const timeStr = today.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-
-      const svg = `
-        <svg xmlns="http://www.w3.org/2000/svg" width="300" height="80">
-          <rect x="1" y="1" width="298" height="78" fill="white" stroke="#009cda" stroke-width="2" rx="5"/>
-          <text x="15" y="25" font-family="Arial" font-size="14" font-weight="bold" fill="#333">${signerName}</text>
-          <text x="15" y="45" font-family="Arial" font-size="11" fill="#666">Data: ${dateStr} às ${timeStr}</text>
-          <text x="15" y="62" font-family="Arial" font-size="10" fill="#009cda">Assinado digitalmente via BRy</text>
-          <rect x="260" y="10" width="30" height="30" fill="#009cda" rx="3"/>
-          <text x="275" y="30" font-family="Arial" font-size="10" fill="white" text-anchor="middle">BRY</text>
-        </svg>
-      `;
-
-      const base64 = Buffer.from(svg).toString('base64');
-      const dataUrl = `data:image/svg+xml;base64,${base64}`;
-
       const logoResponse = await fetch('https://cmsocupacional.com.br/images/logo.png');
+      
+      if (!logoResponse.ok) {
+        throw new Error(`Falha ao baixar logo: ${logoResponse.status}`);
+      }
+      
       const logoBuffer = await logoResponse.arrayBuffer();
       const logoBase64 = Buffer.from(logoBuffer).toString('base64');
 
+      console.info(`[BryEasySignService] Logo base64 length: ${logoBase64.length}`);
       console.info(`[BryEasySignService] Imagem do carimbo gerada com sucesso`);
+
       return logoBase64;
     } catch (error) {
       console.error(`[BryEasySignService] Erro ao gerar imagem do carimbo:`, error);
@@ -154,14 +143,14 @@ export class BryEasySignService {
 
     const stampImageBase64 = await this.generateStampImage(signerName);
 
-    const payload: EasySignRequest = {
+const payload: EasySignRequest = {
       name: 'Assinatura Facial do Funcionario',
       clientName: 'Sistema Interno',
       signersData: [
         {
           name: signerName.toUpperCase(),
           email: signerEmail.toLowerCase(),
-          authenticationOptions: ['SELFIE', 'LIVENESS'],
+          authenticationOptions: ['SELFIE', 'LIVENNESS'],
           typeMessaging: ['LINK'],
           positioningMode: 'CREATOR',
           signatureConfig: {
@@ -169,10 +158,10 @@ export class BryEasySignService {
             visualRepresentation: {
               position: {
                 page: 1,
-                x: 350,
-                y: 100,
+                x: 50,
+                y: 650,
                 width: 200,
-                height: 60,
+                height: 80,
               },
               image: {
                 base64: stampImageBase64,
@@ -190,7 +179,11 @@ export class BryEasySignService {
     };
 
     console.info(`[BryEasySignService] Verificando estrutura do payload antes de enviar...`);
-    console.log(JSON.stringify(payload));
+    console.log('[BryEasySignService] Stamp image length:', stampImageBase64.length);
+    console.log('[BryEasySignService] Stamp image prefix:', stampImageBase64.substring(0, 50));
+    
+    const payloadStr = JSON.stringify(payload);
+    console.log('[BryEasySignService] Payload signersData:', JSON.stringify(payload.signersData));
 
     const response = await this.makeAuthenticatedRequest('/signatures', {
       method: 'POST',
