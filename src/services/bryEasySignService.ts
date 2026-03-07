@@ -153,10 +153,10 @@ export class BryEasySignService {
               signerNonce: 'funcionario-01',
               // imageNonce removido
               page: 1,
-              x: 130,
-              y: 150,
-              width: 60,
-              height: 20,
+              x: 120,
+              y: 20,
+              width: 80,
+              height: 30,
             }
           ],
         },
