@@ -8,12 +8,19 @@ interface EasySignDocument {
 interface EasySignSigner {
   name: string;
   email: string;
-  authenticationOptions?: string[];
   authentications?: string[];
   typeMessaging?: string[];
-  positioningMode?: string;
   signatureConfig?: {
     mode: string;
+    visualRepresentation?: {
+      position: {
+        page: number;
+        x: number;
+        y: number;
+        width: number;
+        height: number;
+      };
+    };
   };
 }
 
@@ -116,9 +123,17 @@ const payload: EasySignRequest = {
           email: signerEmail.toLowerCase(),
           authentications: ['SELFIE', 'LIVENESS'],
           typeMessaging: ['LINK'],
-          positioningMode: 'SIGNEE',
           signatureConfig: {
-            mode: 'SIMPLE'
+            mode: 'SIMPLE',
+            visualRepresentation: {
+              position: {
+                page: 1,
+                x: 350,
+                y: 100,
+                width: 200,
+                height: 60,
+              },
+            },
           },
         },
       ],
