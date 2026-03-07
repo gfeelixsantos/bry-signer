@@ -10,6 +10,7 @@ interface EasySignSigner {
   email: string;
   authentications?: string[];
   typeMessaging?: string[];
+  positioningMode?: string;
   signatureConfig?: {
     mode: string;
     visualRepresentation?: {
@@ -123,6 +124,7 @@ const payload: EasySignRequest = {
           email: signerEmail.toLowerCase(),
           authentications: ['SELFIE', 'LIVENESS'],
           typeMessaging: ['LINK'],
+          positioningMode: 'SIGNEE',
           signatureConfig: {
             mode: 'SIMPLE',
             visualRepresentation: {

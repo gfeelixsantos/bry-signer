@@ -8,7 +8,7 @@ type Step = 'form' | 'camera' | 'downloading' | 'complete';
 export default function EasySignPage() {
   const [step, setStep] = useState<Step>('form');
   const [signerName, setSignerName] = useState('Gabriel Teste Facial');
-  const [signerEmail, setSignerEmail] = useState('eocial@cmsocupacional.com.br');
+  const [signerEmail, setSignerEmail] = useState('esocial@cmsocupacional.com.br');
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [pdfBase64, setPdfBase64] = useState('');
   const [requestId, setRequestId] = useState('');
