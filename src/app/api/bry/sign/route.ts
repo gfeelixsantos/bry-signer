@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
       // Passo 3: Enviar os dados do QR Code (configuracao_qrcode)
       // Apenas o texto/URL é necessário aqui
       qrCodeConfig = {
-        texto: `https://verificador.iti.gov.br/verifier-2.2/?doc=${fileName}&ts=${now.getTime()}`,
+        texto: `https://validar.iti.gov.br/`,
         dimensao: 10,
         margem: 0,
         nivelCorrecaoErro: 'M',

@@ -42,6 +42,27 @@ export default function Signer() {
     };
   }, []);
 
+  // Effect to automatically open authentication window when link is generated
+  useEffect(() => {
+    if (step === 'link' && qrCodeUrl) {
+      const width = 800;
+      const height = 600;
+      const left = window.screen.width ? (window.screen.width - width) / 2 : 0;
+      const top = window.screen.height ? (window.screen.height - height) / 2 : 0;
+      
+      const newWindow = window.open(
+        qrCodeUrl,
+        '_blank',
+        `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes,status=yes`
+      );
+
+      // Focus the new window if it was created
+      if (newWindow) {
+        newWindow.focus();
+      }
+    }
+  }, [step, qrCodeUrl]);
+
   const init = async () => {
     setLoading(true);
     setError('');
@@ -521,10 +542,12 @@ export default function Signer() {
           {step === 'link' && (
             <div className="text-center space-y-6">
               <h2 className="text-2xl font-semibold text-gray-800">
-                Escaneie o QR Code com seu celular
+                Autenticação Necessária
               </h2>
               <p className="text-gray-600">
-                Você será redirecionado para autenticar no provedor de certificado
+                Uma nova janela foi aberta para você autenticar no provedor de certificado.
+                <br />
+                Caso não tenha aberto, clique no link abaixo ou escaneie o QR Code.
               </p>
 
               <div className="flex justify-center p-4 bg-white border-2 border-indigo-100 rounded-xl inline-block">
@@ -533,16 +556,19 @@ export default function Signer() {
 
               <div className="space-y-2">
                 <p className="text-sm text-gray-500">
-                  Ou abra diretamente no celular:
+                  Link de autenticação manual:
                 </p>
                 <a
                   href={qrCodeUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-indigo-600 hover:underline text-sm break-all"
+                  className="text-indigo-600 hover:underline text-sm break-all font-medium"
                 >
-                  {qrCodeUrl}
+                  Clique aqui para autenticar
                 </a>
+                <p className="text-xs text-gray-400 break-all mt-1">
+                  {qrCodeUrl}
+                </p>
               </div>
 
               <div className="flex items-center justify-center space-x-2">
