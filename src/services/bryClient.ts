@@ -1,5 +1,10 @@
 import { bryAuthService } from './bryAuthService';
+import axios from 'axios';
 
+interface BryErrorResponse {
+  chave?: string;
+  message: string;
+}
 interface BryError {
   message: string;
   status: number;
@@ -343,6 +348,264 @@ class BryClient {
 
   getCallbackUrl(state: string): string {
     return `${this.getAppUrl()}/api/bry/callback?state=${state}`;
+  }
+
+    /**
+   * Valida assinatura PDF/PAdES usando o BRy HUB Signer
+   * 
+   * ESTRUTURA CORRETA DA API BRY (CONFIRMADA PELA DOCUMENTAÇÃO OFICIAL):
+   * A API usa mapeamento Spring Boot de multipart/form-data para List<SignatureData>.
+   * Usa notação de array INDEXADO para suportar múltiplas assinaturas.
+   * 
+   * FormData correto:
+   * - nonce: string do BigInteger (nonce geral da requisição)
+   * - signatures[0][nonce]: string do BigInteger (nonce da primeira assinatura)
+   * - signatures[0][content]: arquivo PDF (binary)
+   * - contentsReturn: 'true' (opcional, para retornar dados do carimbo)
+   * 
+   * NOTA: O índice [0] indica a primeira assinatura. Para verificar múltiplas
+   * assinaturas, usar signatures[1][nonce], signatures[2][nonce], etc.
+   * 
+   * ENDPOINT: https://hub2.bry.com.br/api/pdf-verification-service/v1/signatures/verify
+   * MÉTODO: POST multipart/form-data
+   */
+  async verifyPdf(pdfBuffer: ArrayBuffer, fileName: string): Promise<unknown> {
+    // URL padrão do serviço SaaS da BRy
+    const URL_VERIFICACAO_HUB = process.env.BRY_URL_VERIFICACAO_PDF || 
+      'https://hub2.bry.com.br/api/pdf-verification-service/v1/signatures/verify';
+
+    try {
+      console.info('Starting PDF signature validation', { 
+        fileName,
+        url: URL_VERIFICACAO_HUB.replace(/https?:\/\/[^\/]+/, '***'),
+        endpoint: '/api/pdf-verification-service/v1/signatures/verify'
+      });
+
+      const tokenBry = await bryAuthService.getAccessToken();
+
+      // 1. GERAR NONCE como STRING de BigInteger (15 dígitos)
+      // CRÍTICO: Deve ser STRING para evitar arredondamento do JavaScript
+      // e para compatibilidade com o mapeamento Spring Boot
+      const nonceValue = Math.floor(Math.random() * 1_000_000_000_000_000).toString();
+
+      // 2. CRIAR FORMDATA com estrutura EXATA da documentação
+      // A API usa notação de array INDEXADO: signatures[0][nonce], signatures[0][content]
+      const formData = new FormData();
+      
+      // Parâmetro: nonce (Nonce geral da requisição)
+      formData.append('nonce', nonceValue);
+      
+      // Parâmetro: signatures[0][nonce] (Nonce da PRIMEIRA assinatura - índice 0)
+      // IMPORTANTE: Usar índice [0] para indicar primeira assinatura
+      formData.append('signatures[0][nonce]', nonceValue);
+      
+      // Parâmetro: signatures[0][content] (Arquivo PDF - índice 0)
+      // IMPORTANTE: Usar mesmo índice [0] para o conteúdo
+      const pdfBlob = new Blob([pdfBuffer], { type: 'application/pdf' });
+      formData.append('signatures[0][content]', pdfBlob, fileName || 'documento.pdf');
+      
+      // Parâmetro opcional: contentsReturn (Retornar dados do carimbo)
+      formData.append('contentsReturn', 'true');
+
+      console.info('Validation request prepared', {
+        hasToken: !!tokenBry,
+        fileName: fileName || 'documento.pdf',
+        fileSize: pdfBuffer.byteLength,
+        nonceValue: nonceValue,
+        nonceType: 'string (BigInteger)',
+        formDataKeys: ['nonce', 'signatures[0][nonce]', 'signatures[0][content]', 'contentsReturn'],
+        endpoint: '/api/pdf-verification-service/v1/signatures/verify'
+      });
+
+      // 3. REQUISIÇÃO COM AXIOS
+      // Headers: apenas Authorization
+      // Axios automaticamente define Content-Type como multipart/form-data com boundary
+      const response = await axios.post(URL_VERIFICACAO_HUB, formData, {
+        headers: {
+          'Authorization': `Bearer ${tokenBry}`,
+          // NÃO definir Content-Type manualmente
+          // Axios gerencia automaticamente para FormData
+        },
+        timeout: 45000, // 45 segundos para processamento
+        maxBodyLength: Infinity,
+        maxContentLength: Infinity,
+      });
+
+      console.info('PDF signature validated successfully', {
+        status: response.status,
+        hasData: !!response.data,
+        dataKeys: response.data ? Object.keys(response.data) : []
+      });
+
+      return response.data;
+
+    } catch (error: unknown) {
+      // Tratamento de erros específicos da API BRy
+      if (error && typeof error === 'object' && 'response' in error) {
+        const axiosError = error as { 
+          response?: { 
+            status?: number; 
+            data?: BryErrorResponse;
+            statusText?: string;
+          };
+          message?: string;
+        };
+        
+        const status = axiosError.response?.status;
+        const errorData = axiosError.response?.data;
+        
+        // ERRO 400 - Bad Request
+        if (status === 400) {
+          const errorKey = errorData?.chave;
+          const errorMessage = errorData?.message || 'Requisição inválida';
+          
+          console.error('Bad Request - Validation error', {
+            status,
+            chave: errorKey,
+            message: errorMessage
+          });
+          
+          // Erros comuns da API BRy
+          if (errorKey === 'excecao.hub.requisicao.nonce') {
+            throw new Error(
+              'ERRO DE NONCE: Estrutura do campo signatures incorreta.\n' +
+              'Campo FormData: "signatures" (JSON array)\n' +
+              'Estrutura correta: [{"nonce": 123456789}]\n' +
+              'IMPORTANTE: nonce deve ser NUMBER (não string) para BigInteger\n' +
+              'Exemplo correto: JSON.stringify([{ nonce: 123456789 }])\n' +
+              'Exemplo ERRADO: JSON.stringify([{ nonce: "123456789" }])\n' +
+              'Erro da API: ' + errorMessage
+            );
+          }
+          
+          if (errorKey === 'excecao.hub.documento.invalido') {
+            throw new Error(
+              'ERRO: Documento PDF inválido ou corrompido.\n' +
+              'Erro da API: ' + errorMessage
+            );
+          }
+          
+          throw new Error(
+            `ERRO 400: ${errorMessage}\n` +
+            (errorKey ? `Código: ${errorKey}\n` : '') +
+            'Verifique o formato do documento e dos parâmetros enviados.'
+          );
+        }
+        
+        // ERRO 401 - Unauthorized
+        if (status === 401) {
+          console.error('Authentication error', {
+            status,
+            message: 'Token inválido ou expirado'
+          });
+          
+          throw new Error(
+            'ERRO 401: Token de autenticação inválido ou expirado.\n' +
+            'Verifique as credenciais BRY_CLIENT_ID e BRY_CLIENT_SECRET.'
+          );
+        }
+        
+        // ERRO 404 - Not Found
+        if (status === 404) {
+          console.error('URL verification error - 404 Not Found', {
+            url: URL_VERIFICACAO_HUB
+          });
+          
+          throw new Error(
+            'ERRO 404: Endpoint não encontrado.\n' +
+            'URL configurada: ' + URL_VERIFICACAO_HUB + '\n' +
+            'URL correta: https://hub2.bry.com.br/api/pdf-verification-service/v1/signatures/verify\n' +
+            'Verifique a variável BRY_URL_VERIFICACAO_PDF no .env'
+          );
+        }
+        
+        // ERRO 415 - Unsupported Media Type
+        if (status === 415) {
+          console.error('Unsupported Media Type error', {
+            status,
+            message: 'Content-Type incorreto'
+          });
+          
+          throw new Error(
+            'ERRO 415: Content-Type não suportado.\n' +
+            'A requisição deve usar multipart/form-data.\n' +
+            'Não defina Content-Type manualmente - deixe o Axios gerenciar.'
+          );
+        }
+        
+        // ERRO 500/502/503 - Server Error
+        if (status && status >= 500) {
+          console.error('Server error', {
+            status,
+            statusText: axiosError.response?.statusText
+          });
+          
+          throw new Error(
+            `ERRO ${status}: Erro no servidor BRy.\n` +
+            'O serviço pode estar temporariamente indisponível.\n' +
+            'Tente novamente em alguns minutos.'
+          );
+        }
+        
+        // Outros erros HTTP
+        const errorMessage = errorData?.message || 
+          axiosError.response?.statusText || 
+          'Erro desconhecido';
+          
+        console.error('HTTP error', {
+          status,
+          message: errorMessage,
+          data: errorData
+        });
+        
+        throw new Error(
+          `ERRO ${status || 'HTTP'}: ${errorMessage}\n` +
+          'Detalhes: ' + JSON.stringify(errorData || {}).substring(0, 200)
+        );
+      }
+
+      // Erros de rede ou timeout
+      if (error instanceof Error) {
+        if (error.message.includes('timeout')) {
+          console.error('Timeout error', {
+            message: error.message
+          });
+          
+          throw new Error(
+            'ERRO DE TIMEOUT: A requisição demorou muito para responder.\n' +
+            'O documento pode ser muito grande ou o servidor está lento.\n' +
+            'Tente novamente ou reduza o tamanho do PDF.'
+          );
+        }
+        
+        if (error.message.includes('Network Error')) {
+          console.error('Network error', {
+            message: error.message
+          });
+          
+          throw new Error(
+            'ERRO DE REDE: Não foi possível conectar ao servidor BRy.\n' +
+            'Verifique sua conexão com a internet e o firewall.'
+          );
+        }
+        
+        console.error('Unknown error', {
+          message: error.message
+        });
+        
+        throw new Error(`Erro ao verificar PDF: ${error.message}`);
+      }
+
+      // Erro completamente desconhecido
+      console.error('Unexpected error type', {
+        error: String(error)
+      });
+      
+      throw new Error(
+        'Erro inesperado ao verificar PDF.\n' +
+        'Erro: ' + String(error).substring(0, 200)
+      );
+    }
   }
 }
 
