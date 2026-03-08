@@ -27,6 +27,7 @@ export default function Signer() {
   const [error, setError] = useState<string>('');
   const [hasPersistedToken, setHasPersistedToken] = useState(false);
   const [signatureMethod, setSignatureMethod] = useState<SignatureMethod>('BRYKMS');
+  const [useSignatureImage, setUseSignatureImage] = useState(true);
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
@@ -236,6 +237,7 @@ export default function Signer() {
       console.info('[Signer] Token BRYKMS obtido, iniciando assinatura...');
       console.info(`[Signer] KMS Type: ${data.kmsType}`);
       console.info(`[Signer] KMS Token: ${data.token.substring(0, 30)}...`);
+      console.info(`[Signer] Use Signature Image: ${useSignatureImage}`);
       
       setKmsType('BRYKMS');
       setStep('signing');
@@ -245,6 +247,7 @@ export default function Signer() {
       formData.append('fileName', pdfFile.name);
       formData.append('kmsToken', data.token);
       formData.append('kmsType', 'BRYKMS');
+      formData.append('useSignatureImage', useSignatureImage.toString());
 
       const signResponse = await fetch('/api/bry/sign', {
         method: 'POST',
@@ -415,6 +418,19 @@ export default function Signer() {
           </div>
         </div>
       )}
+
+      <div className="flex items-center">
+        <input
+          type="checkbox"
+          id="useSignatureImage"
+          checked={useSignatureImage}
+          onChange={(e) => setUseSignatureImage(e.target.checked)}
+          className="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+        />
+        <label htmlFor="useSignatureImage" className="ml-2 text-sm text-gray-700">
+          Adicionar imagem/carimbo visual de assinatura
+        </label>
+      </div>
 
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-2">

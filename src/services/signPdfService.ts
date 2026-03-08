@@ -1,10 +1,15 @@
-import { bryClient, KmsType } from '@/services/bryClient';
+import { bryClient, KmsType, SignatureImageConfig, SignatureTextConfig } from '@/services/bryClient';
+import fs from 'fs';
+import path from 'path';
 
 export async function signPdf(
   pdfBase64: string,
   fileName: string,
   kmsToken: string,
-  kmsType: KmsType = 'PSC'
+  kmsType: KmsType = 'PSC',
+  imageConfig?: SignatureImageConfig,
+  textConfig?: SignatureTextConfig,
+  imageBase64?: string
 ): Promise<ArrayBuffer> {
   console.info(`[SignPdfService] Iniciando assinatura do arquivo: ${fileName}`);
   console.info(`[SignPdfService] KMS Type: ${kmsType}`);
@@ -24,9 +29,58 @@ export async function signPdf(
     arrayBuffer,
     fileName,
     kmsToken,
-    kmsType
+    kmsType,
+    imageConfig,
+    textConfig,
+    imageBase64
   );
 
   console.info(`[SignPdfService] Assinatura concluída com sucesso`);
   return signedPdf;
+}
+
+export async function loadImageAsBase64(imagePath: string): Promise<string> {
+  const absolutePath = path.resolve(imagePath);
+  const imageBuffer = fs.readFileSync(absolutePath);
+  return imageBuffer.toString('base64');
+}
+
+export function createSignatureImageConfig(
+  options?: {
+    x?: number;
+    y?: number;
+    largura?: number;
+    altura?: number;
+    pagina?: number | 'TODAS' | 'PRIMEIRA' | 'ULTIMA';
+    posicao?: 'INFERIOR_DIREITO' | 'INFERIOR_ESQUERDO' | 'SUPERIOR_DIREITO' | 'SUPERIOR_ESQUERDO';
+  }
+): SignatureImageConfig {
+  return {
+    coordenadaX: options?.x || 30,
+    coordenadaY: options?.y || 30,
+    largura: options?.largura || 40,
+    altura: options?.altura || 20,
+    pagina: options?.pagina || 'PRIMEIRA',
+    posicao: options?.posicao || 'INFERIOR_DIREITO'
+  };
+}
+
+export function createSignatureTextConfig(
+  texto: string,
+  options?: {
+    x?: number;
+    y?: number;
+    fonte?: string;
+    tamanho?: number;
+    pagina?: number | 'TODAS' | 'PRIMEIRA' | 'ULTIMA';
+  }
+): SignatureTextConfig {
+  return {
+    texto: texto,
+    coordenadaX: options?.x || 75,
+    coordenadaY: options?.y || 35,
+    fonte: options?.fonte || 'HELVETICA',
+    tamanhoFonte: options?.tamanho || 10,
+    pagina: options?.pagina || 'PRIMEIRA'
+  };
 }

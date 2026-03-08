@@ -6,6 +6,24 @@ interface BryError {
   details?: unknown;
 }
 
+export interface SignatureImageConfig {
+  altura: number;
+  largura: number;
+  coordenadaX: number;
+  coordenadaY: number;
+  posicao: 'INFERIOR_DIREITO' | 'INFERIOR_ESQUERDO' | 'SUPERIOR_DIREITO' | 'SUPERIOR_ESQUERDO';
+  pagina: number | 'TODAS' | 'PRIMEIRA' | 'ULTIMA';
+}
+
+export interface SignatureTextConfig {
+  texto: string;
+  pagina: number | 'TODAS' | 'PRIMEIRA' | 'ULTIMA';
+  fonte: string;
+  tamanhoFonte: number;
+  coordenadaX: number;
+  coordenadaY: number;
+}
+
 export type KmsType = 'BRYKMS' | 'PSC';
 
 class BryClient {
@@ -146,11 +164,20 @@ class BryClient {
     pdfBuffer: ArrayBuffer,
     fileName: string,
     kmsToken: string,
-    kmsType: KmsType = 'PSC'
+    kmsType: KmsType = 'PSC',
+    imageConfig?: SignatureImageConfig,
+    textConfig?: SignatureTextConfig,
+    imageBase64?: string
   ): Promise<ArrayBuffer> {
     console.info(`[BryClient] Enviando PDF para assinatura: ${fileName}`);
     console.info(`[BryClient] KMS Type: ${kmsType}`);
     console.info(`[BryClient] KMS Data: ${kmsToken}`);
+    if (imageConfig) {
+      console.info(`[BryClient] Configuração de imagem:`, JSON.stringify(imageConfig));
+    }
+    if (textConfig) {
+      console.info(`[BryClient] Configuração de texto:`, JSON.stringify(textConfig));
+    }
 
     let kmsDataObject: Record<string, string>;
     
@@ -166,7 +193,7 @@ class BryClient {
     }
 
     const configAssinatura = {
-      perfil: 'Basica',
+      perfil: 'Completa',
       algoritmoHash: 'SHA256',
       kms_type: kmsType,
       kms_data: kmsDataObject
@@ -177,11 +204,29 @@ class BryClient {
     formData.append('documento', pdfBlob, fileName);
     formData.append('dados_assinatura', JSON.stringify(configAssinatura));
 
+    if (imageConfig) {
+      const configImagem = [imageConfig];
+      formData.append('configuracao_imagem', JSON.stringify(configImagem));
+      console.info(`[BryClient] configuracao_imagem enviado: ${JSON.stringify(configImagem)}`);
+    }
+
+    if (textConfig) {
+      const configTexto = [textConfig];
+      formData.append('configuracao_texto', JSON.stringify(configTexto));
+      console.info(`[BryClient] configuracao_texto enviado: ${JSON.stringify(configTexto)}`);
+    }
+
+    if (imageBase64) {
+      const imageBuffer = Buffer.from(imageBase64, 'base64');
+      const imageBlob = new Blob([imageBuffer], { type: 'image/png' });
+      formData.append('imagem', imageBlob, 'selo_assinatura.png');
+      console.info(`[BryClient] Imagem enviada no FormData (tamanho: ${imageBuffer.length} bytes)`);
+    }
+
     const token = await bryAuthService.getAccessToken();
     const url = `${this.getHubUrl()}/fw/v1/pdf/kms/lote/assinaturas`;
 
     console.info(`[BryClient] Request URL: ${url}`);
-    console.info(`[BryClient] Request dados_assinatura: ${JSON.stringify(configAssinatura)}`);
     console.info(`[BryClient] Auth token: ${token.substring(0, 20)}...`);
 
     const response = await fetch(url, {
@@ -190,6 +235,7 @@ class BryClient {
         'Authorization': `Bearer ${token}`,
         'kms_type': kmsType,
         'kms_data': JSON.stringify(kmsDataObject),
+        'accept': 'application/json',
       },
       body: formData,
     });
@@ -209,7 +255,7 @@ class BryClient {
 
     if (contentType.includes('application/json')) {
       const jsonResponse = await response.json();
-      console.info(`[BryClient] Resposta JSON:`, JSON.stringify(jsonResponse).substring(0, 300));
+      console.info(`[BryClient] Resposta JSON completa:`, JSON.stringify(jsonResponse));
       
       const document = jsonResponse.documentos?.[0];
       if (document?.links?.[0]?.href) {
