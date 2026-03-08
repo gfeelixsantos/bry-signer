@@ -512,12 +512,20 @@ export default function Signer() {
         <p className="text-center text-gray-600 mb-4">
           Ou utilize outro método de assinatura
         </p>
-        <Link
-          href="/easysign"
-          className="block w-full bg-teal-600 text-white py-3 px-6 rounded-lg font-medium hover:bg-teal-700 transition-colors text-center"
-        >
-          Assinatura com Selfie (Easy Sign)
-        </Link>
+        <div className="space-y-3">
+          <Link
+            href="/easysign"
+            className="block w-full bg-teal-600 text-white py-3 px-6 rounded-lg font-medium hover:bg-teal-700 transition-colors text-center"
+          >
+            Assinatura com Selfie (Easy Sign)
+          </Link>
+          <Link
+            href="/verify"
+            className="block w-full bg-purple-600 text-white py-3 px-6 rounded-lg font-medium hover:bg-purple-700 transition-colors text-center"
+          >
+            Verificar Documento PDF
+          </Link>
+        </div>
       </div>
     </div>
   );
