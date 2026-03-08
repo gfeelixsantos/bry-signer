@@ -6,6 +6,8 @@ interface BryError {
   details?: unknown;
 }
 
+export type KmsType = 'BRYKMS' | 'PSC';
+
 class BryClient {
   private getIntegraUrl(): string {
     const url = process.env.BRY_INTEGRA_URL;
@@ -29,6 +31,28 @@ class BryClient {
       throw new Error('NEXT_PUBLIC_APP_URL não configurada');
     }
     return url;
+  }
+
+  getBrykmsToken(): string {
+    const token = process.env.BRYKMS_TOKEN;
+    if (!token) {
+      throw new Error('BRYKMS_TOKEN não configurado');
+    }
+    return token;
+  }
+
+  getBrykmsCredentials(): { uuid_cert?: string; user?: string; pin?: string; token?: string } {
+    return {
+      uuid_cert: process.env.BRYKMS_UUID_CERT,
+      user: process.env.BRYKMS_USER,
+      pin: process.env.BRYKMS_PIN,
+      token: process.env.BRYKMS_TOKEN,
+    };
+  }
+
+  hasBrykmsCredentials(): boolean {
+    const creds = this.getBrykmsCredentials();
+    return !!(creds.uuid_cert || creds.user) && !!(creds.pin || creds.token);
   }
 
   private async makeAuthenticatedRequest(
@@ -121,48 +145,126 @@ class BryClient {
   async signPdf(
     pdfBuffer: ArrayBuffer,
     fileName: string,
-    kmsToken: string
+    kmsToken: string,
+    kmsType: KmsType = 'PSC'
   ): Promise<ArrayBuffer> {
     console.info(`[BryClient] Enviando PDF para assinatura: ${fileName}`);
-    console.info(`[BryClient] KMS Token: ${kmsToken.substring(0, 20)}...`);
+    console.info(`[BryClient] KMS Type: ${kmsType}`);
+    console.info(`[BryClient] KMS Data: ${kmsToken}`);
 
-    const dadosAssinatura = {
-      signatureType: 'PKCS7',
-      signatureAlgorithm: 'RSA-SHA256',
+    let kmsDataObject: Record<string, string>;
+    
+    if (kmsType === 'BRYKMS') {
+      try {
+        kmsDataObject = JSON.parse(kmsToken);
+        console.info(`[BryClient] KMS Data (BRYKMS) - uuid_cert: ${kmsDataObject.uuid_cert || 'N/A'}, user: ${kmsDataObject.user || 'N/A'}`);
+      } catch {
+        throw new Error('kmsToken inválido para BRYKMS - deve ser um JSON válido');
+      }
+    } else {
+      kmsDataObject = { token: kmsToken };
+    }
+
+    const configAssinatura = {
+      perfil: 'Basica',
+      algoritmoHash: 'SHA256',
+      kms_type: kmsType,
+      kms_data: kmsDataObject
     };
 
     const formData = new FormData();
     const pdfBlob = new Blob([pdfBuffer], { type: 'application/pdf' });
     formData.append('documento', pdfBlob, fileName);
-    formData.append('kms_data', kmsToken);
-    formData.append('dados_assinatura', JSON.stringify(dadosAssinatura));
+    formData.append('dados_assinatura', JSON.stringify(configAssinatura));
 
     const token = await bryAuthService.getAccessToken();
     const url = `${this.getHubUrl()}/fw/v1/pdf/kms/lote/assinaturas`;
 
     console.info(`[BryClient] Request URL: ${url}`);
+    console.info(`[BryClient] Request dados_assinatura: ${JSON.stringify(configAssinatura)}`);
+    console.info(`[BryClient] Auth token: ${token.substring(0, 20)}...`);
 
     const response = await fetch(url, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
-        'kms_type': 'PSC',
+        'kms_type': kmsType,
+        'kms_data': JSON.stringify(kmsDataObject),
       },
       body: formData,
     });
 
     console.info(`[BryClient] Response Status: ${response.status}`);
 
+    const contentType = response.headers.get('content-type') || '';
+    console.info(`[BryClient] Content-Type: ${contentType}`);
+
     if (!response.ok) {
       const errorText = await response.text();
       console.error(`[BryClient] Erro na assinatura: ${errorText}`);
-      throw new Error(`Falha ao assinar PDF: ${response.status}`);
+      throw new Error(`Falha ao assinar PDF: ${response.status} - ${errorText}`);
     }
 
-    const arrayBuffer = await response.arrayBuffer();
+    let arrayBuffer: ArrayBuffer;
+
+    if (contentType.includes('application/json')) {
+      const jsonResponse = await response.json();
+      console.info(`[BryClient] Resposta JSON:`, JSON.stringify(jsonResponse).substring(0, 300));
+      
+      const document = jsonResponse.documentos?.[0];
+      if (document?.links?.[0]?.href) {
+        const downloadUrl = document.links[0].href;
+        console.info(`[BryClient] Baixando PDF de: ${downloadUrl}`);
+        
+        const downloadResponse = await fetch(downloadUrl, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        });
+        
+        if (!downloadResponse.ok) {
+          throw new Error(`Falha ao baixar PDF assinado: ${downloadResponse.status}`);
+        }
+        
+        arrayBuffer = await downloadResponse.arrayBuffer();
+      } else if (jsonResponse.conteudo || jsonResponse.pdf || jsonResponse.documento) {
+        const base64Data = jsonResponse.conteudo || jsonResponse.pdf || jsonResponse.documento;
+        const buffer = Buffer.from(base64Data, 'base64');
+        arrayBuffer = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
+      } else {
+        throw new Error('Resposta JSON não contém link de download');
+      }
+    } else {
+      arrayBuffer = await response.arrayBuffer();
+    }
+
     console.info(`[BryClient] PDF assinado com sucesso, tamanho: ${arrayBuffer.byteLength} bytes`);
 
     return arrayBuffer;
+  }
+
+  buildBrykmsData(params: {
+    uuid_cert?: string;
+    user?: string;
+    pin?: string;
+    token?: string;
+  }): string {
+    const kmsData: Record<string, string> = {};
+    
+    if (params.uuid_cert) {
+      kmsData.uuid_cert = params.uuid_cert;
+    }
+    if (params.user) {
+      kmsData.user = params.user;
+    }
+    if (params.pin) {
+      kmsData.pin = Buffer.from(params.pin).toString('base64');
+    }
+    if (params.token) {
+      kmsData.token = params.token;
+    }
+    
+    return JSON.stringify(kmsData);
   }
 
   getCallbackUrl(state: string): string {

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { signPdf } from '@/services/signPdfService';
+import { KmsType } from '@/services/bryClient';
 
 export async function POST(request: NextRequest) {
   try {
@@ -9,6 +10,9 @@ export async function POST(request: NextRequest) {
     const pdfBase64 = formData.get('pdfBase64') as string;
     const fileName = formData.get('fileName') as string;
     const kmsToken = formData.get('kmsToken') as string;
+    const kmsType = (formData.get('kmsType') as KmsType) || 'PSC';
+
+    console.info(`[SignAPI] Recebido - pdfBase64: ${!!pdfBase64}, fileName: ${fileName}, kmsToken: ${kmsToken?.substring(0, 30)}..., kmsType: ${kmsType}`);
 
     if (!pdfBase64 || !fileName || !kmsToken) {
       console.error('[SignAPI] Parâmetros faltando');
@@ -19,8 +23,10 @@ export async function POST(request: NextRequest) {
     }
 
     console.info(`[SignAPI] Assinando arquivo: ${fileName}`);
+    console.info(`[SignAPI] KMS Type: ${kmsType}`);
+    console.info(`[SignAPI] KMS Token: ${kmsToken.substring(0, 50)}...`);
 
-    const signedPdf = await signPdf(pdfBase64, fileName, kmsToken);
+    const signedPdf = await signPdf(pdfBase64, fileName, kmsToken, kmsType);
 
     console.info(`[SignAPI] PDF assinado com sucesso, retornando arquivo...`);
 

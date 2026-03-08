@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { QRCodeSVG } from 'qrcode.react';
 import { listPSCs, generateIntegrationLink, checkSavedPscToken } from '@/actions/bryActions';
+import { KmsType } from '@/services/bryClient';
 
 interface PSC {
   name: string;
@@ -11,6 +12,7 @@ interface PSC {
 }
 
 type Step = 'upload' | 'link' | 'signing' | 'complete';
+type SignatureMethod = 'BRYKMS' | 'PSC';
 
 export default function Signer() {
   const [step, setStep] = useState<Step>('upload');
@@ -20,14 +22,16 @@ export default function Signer() {
   const [pdfBase64, setPdfBase64] = useState<string>('');
   const [qrCodeUrl, setQrCodeUrl] = useState<string>('');
   const [kmsToken, setKmsToken] = useState<string>('');
+  const [kmsType, setKmsType] = useState<KmsType>('PSC');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>('');
   const [hasPersistedToken, setHasPersistedToken] = useState(false);
+  const [signatureMethod, setSignatureMethod] = useState<SignatureMethod>('BRYKMS');
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     init();
-  }, []);
+  }, [signatureMethod]);
 
   useEffect(() => {
     return () => {
@@ -39,7 +43,16 @@ export default function Signer() {
 
   const init = async () => {
     setLoading(true);
+    setError('');
     try {
+      if (signatureMethod === 'BRYKMS') {
+        setKmsType('BRYKMS');
+        setHasPersistedToken(false);
+        setKmsToken('');
+        setLoading(false);
+        return;
+      }
+      
       const tokenResult = await checkSavedPscToken();
 
       if (tokenResult.success && tokenResult.token) {
@@ -51,7 +64,11 @@ export default function Signer() {
       }
     } catch (err) {
       console.error('Erro na inicialização:', err);
-      await loadPSCs();
+      if (signatureMethod === 'PSC') {
+        await loadPSCs();
+      } else {
+        setLoading(false);
+      }
     }
   };
 
@@ -153,6 +170,7 @@ export default function Signer() {
       formData.append('pdfBase64', pdfBase64);
       formData.append('fileName', pdfFile.name);
       formData.append('kmsToken', kmsToken);
+      formData.append('kmsType', kmsType);
 
       const response = await fetch('/api/bry/sign', {
         method: 'POST',
@@ -177,6 +195,80 @@ export default function Signer() {
       setStep('complete');
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Erro ao assinar PDF';
+      setError(message);
+      setStep('upload');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleMethodChange = (method: SignatureMethod) => {
+    setSignatureMethod(method);
+    setSelectedPsc('');
+    setHasPersistedToken(false);
+    setKmsToken('');
+    setError('');
+    if (pollingRef.current) {
+      clearInterval(pollingRef.current);
+    }
+  };
+
+  const handleSignWithBrykms = async () => {
+    if (!pdfFile || !pdfBase64) {
+      setError('Faça upload de um PDF primeiro');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+
+    try {
+      const response = await fetch('/api/bry/kms-token', {
+        method: 'POST',
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok || data.error) {
+        throw new Error(data.error || 'Erro ao obter token BRYKMS');
+      }
+      
+      console.info('[Signer] Token BRYKMS obtido, iniciando assinatura...');
+      console.info(`[Signer] KMS Type: ${data.kmsType}`);
+      console.info(`[Signer] KMS Token: ${data.token.substring(0, 30)}...`);
+      
+      setKmsType('BRYKMS');
+      setStep('signing');
+      
+      const formData = new FormData();
+      formData.append('pdfBase64', pdfBase64);
+      formData.append('fileName', pdfFile.name);
+      formData.append('kmsToken', data.token);
+      formData.append('kmsType', 'BRYKMS');
+
+      const signResponse = await fetch('/api/bry/sign', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!signResponse.ok) {
+        const errorData = await signResponse.json();
+        throw new Error(errorData.error || 'Erro ao assinar PDF');
+      }
+
+      const blob = await signResponse.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `signed_${pdfFile.name}`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
+      setStep('complete');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Erro ao obter token BRYKMS';
       setError(message);
       setStep('upload');
     } finally {
@@ -210,36 +302,117 @@ export default function Signer() {
 
   const renderUploadStep = () => (
     <div className="space-y-6">
-      {hasPersistedToken ? (
-        <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4 mb-6">
-          <div className="flex items-center">
-            <svg className="w-6 h-6 text-indigo-600 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7"></path></svg>
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-3">
+          Escolha o método de assinatura
+        </label>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <button
+            type="button"
+            onClick={() => handleMethodChange('BRYKMS')}
+            disabled={loading}
+            className={`p-4 rounded-lg border-2 transition-all text-left ${
+              signatureMethod === 'BRYKMS'
+                ? 'border-indigo-600 bg-indigo-50'
+                : 'border-gray-200 hover:border-gray-300'
+            }`}
+          >
+            <div className="flex items-center mb-2">
+              <div className={`w-4 h-4 rounded-full border-2 mr-3 ${
+                signatureMethod === 'BRYKMS' ? 'border-indigo-600 bg-indigo-600' : 'border-gray-300'
+              }`}>
+                {signatureMethod === 'BRYKMS' && (
+                  <div className="flex items-center justify-center h-full">
+                    <div className="w-2 h-2 bg-white rounded-full"></div>
+                  </div>
+                )}
+              </div>
+              <span className="font-medium text-gray-900">Certificado de Teste</span>
+            </div>
+            <p className="text-sm text-gray-500 ml-7">
+              BRYKMS - Cofre interno da BRy para testes
+            </p>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => handleMethodChange('PSC')}
+            disabled={loading}
+            className={`p-4 rounded-lg border-2 transition-all text-left ${
+              signatureMethod === 'PSC'
+                ? 'border-indigo-600 bg-indigo-50'
+                : 'border-gray-200 hover:border-gray-300'
+            }`}
+          >
+            <div className="flex items-center mb-2">
+              <div className={`w-4 h-4 rounded-full border-2 mr-3 ${
+                signatureMethod === 'PSC' ? 'border-indigo-600 bg-indigo-600' : 'border-gray-300'
+              }`}>
+                {signatureMethod === 'PSC' && (
+                  <div className="flex items-center justify-center h-full">
+                    <div className="w-2 h-2 bg-white rounded-full"></div>
+                  </div>
+                )}
+              </div>
+              <span className="font-medium text-gray-900">Meu Certificado em Nuvem</span>
+            </div>
+            <p className="text-sm text-gray-500 ml-7">
+              BirdID, SerproID, etc - Provedores externos
+            </p>
+          </button>
+        </div>
+      </div>
+
+      {signatureMethod === 'PSC' && (
+        <>
+          {hasPersistedToken ? (
+            <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4">
+              <div className="flex items-center">
+                <svg className="w-6 h-6 text-indigo-600 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7"></path></svg>
+                <div>
+                  <h3 className="text-sm font-medium text-indigo-800">Sessão Ativa</h3>
+                  <p className="text-sm text-indigo-600 mt-1">
+                    Uma autorização prévia já foi salva. Você pode assinar diretamente.
+                  </p>
+                </div>
+              </div>
+            </div>
+          ) : (
             <div>
-              <h3 className="text-sm font-medium text-indigo-800">Sessão Ativa</h3>
-              <p className="text-sm text-indigo-600 mt-1">
-                Uma autorização prévia já foi salva. Você pode assinar diretamente.
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Selecione o Provedor de Certificado (PSC)
+              </label>
+              <select
+                value={selectedPsc}
+                onChange={(e) => setSelectedPsc(e.target.value)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-black"
+                disabled={loading}
+              >
+                <option value="">Selecione um PSC...</option>
+                {pscs.map((psc) => (
+                  <option key={psc.name} value={psc.name}>
+                    {psc.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+        </>
+      )}
+
+      {signatureMethod === 'BRYKMS' && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+          <div className="flex items-start">
+            <svg className="w-5 h-5 text-amber-600 mr-3 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+            </svg>
+            <div>
+              <h3 className="text-sm font-medium text-amber-800">Ambiente de Teste</h3>
+              <p className="text-sm text-amber-600 mt-1">
+                Este modo utiliza o certificado de teste BRYKMS. Utilize apenas para homologação e testes.
               </p>
             </div>
           </div>
-        </div>
-      ) : (
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Selecione o Provedor de Certificado (PSC)
-          </label>
-          <select
-            value={selectedPsc}
-            onChange={(e) => setSelectedPsc(e.target.value)}
-            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-black"
-            disabled={loading}
-          >
-            <option value="">Selecione um PSC...</option>
-            {pscs.map((psc) => (
-              <option key={psc.name} value={psc.name}>
-                {psc.name}
-              </option>
-            ))}
-          </select>
         </div>
       )}
 
@@ -272,7 +445,15 @@ export default function Signer() {
         </div>
       </div>
 
-      {hasPersistedToken ? (
+      {signatureMethod === 'BRYKMS' ? (
+        <button
+          onClick={handleSignWithBrykms}
+          disabled={loading || !pdfFile}
+          className="w-full bg-amber-600 text-white py-3 px-6 rounded-lg font-medium hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        >
+          {loading ? 'Assinando...' : 'Assinar com BRYKMS'}
+        </button>
+      ) : hasPersistedToken ? (
         <button
           onClick={handleSignDirectly}
           disabled={loading || !pdfFile}
