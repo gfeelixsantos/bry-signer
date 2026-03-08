@@ -1,4 +1,4 @@
-import { bryClient, KmsType, SignatureImageConfig, SignatureTextConfig } from '@/services/bryClient';
+import { bryClient, KmsType, SignatureImageConfig, SignatureTextConfig, SignatureQRCodeConfig } from '@/services/bryClient';
 import fs from 'fs';
 import path from 'path';
 
@@ -9,7 +9,8 @@ export async function signPdf(
   kmsType: KmsType = 'PSC',
   imageConfig?: SignatureImageConfig,
   textConfig?: SignatureTextConfig,
-  imageBase64?: string
+  imageBase64?: string,
+  qrCodeConfig?: SignatureQRCodeConfig
 ): Promise<ArrayBuffer> {
   console.info(`[SignPdfService] Iniciando assinatura do arquivo: ${fileName}`);
   console.info(`[SignPdfService] KMS Type: ${kmsType}`);
@@ -32,7 +33,8 @@ export async function signPdf(
     kmsType,
     imageConfig,
     textConfig,
-    imageBase64
+    imageBase64,
+    qrCodeConfig
   );
 
   console.info(`[SignPdfService] Assinatura concluída com sucesso`);
@@ -82,5 +84,28 @@ export function createSignatureTextConfig(
     fonte: options?.fonte || 'HELVETICA',
     tamanhoFonte: options?.tamanho || 10,
     pagina: options?.pagina || 'PRIMEIRA'
+  };
+}
+
+export function createSignatureQRCodeConfig(
+  texto: string,
+  options?: {
+    x?: number;
+    y?: number;
+    largura?: number;
+    altura?: number;
+    pagina?: number | 'TODAS' | 'PRIMEIRA' | 'ULTIMA';
+    posicao?: 'INFERIOR_DIREITO' | 'INFERIOR_ESQUERDO' | 'SUPERIOR_DIREITO' | 'SUPERIOR_ESQUERDO';
+  }
+): SignatureQRCodeConfig {
+  return {
+    texto: texto,
+    coordenadaX: options?.x || -25,
+    coordenadaY: options?.y || 10,
+    largura: options?.largura || 15,
+    altura: options?.altura || 15,
+    pagina: options?.pagina || 'PRIMEIRA',
+    posicao: options?.posicao || 'INFERIOR_DIREITO',
+    dimensao: 1
   };
 }

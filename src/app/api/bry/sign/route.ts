@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { signPdf, loadImageAsBase64, createSignatureImageConfig, createSignatureTextConfig } from '@/services/signPdfService';
-import { KmsType, SignatureImageConfig, SignatureTextConfig } from '@/services/bryClient';
+import { signPdf, loadImageAsBase64, createSignatureImageConfig, createSignatureTextConfig, createSignatureQRCodeConfig } from '@/services/signPdfService';
+import { KmsType, SignatureImageConfig, SignatureTextConfig, SignatureQRCodeConfig } from '@/services/bryClient';
 import fs from 'fs';
 import path from 'path';
 
@@ -31,49 +31,64 @@ export async function POST(request: NextRequest) {
 
     let imageConfig: SignatureImageConfig | undefined;
     let textConfig: SignatureTextConfig | undefined;
+    let qrCodeConfig: SignatureQRCodeConfig | undefined;
     let imageBase64: string | undefined;
 
     if (useSignatureImage) {
-      console.info('[SignAPI] Carregando imagem de assinatura...');
-      const logoPath = path.join(process.cwd(), 'src', 'services', 'logo-cmso.png');
+      console.info('[SignAPI] Configurando assinatura com QR Code dinâmico...');
       
-      console.info(`[SignAPI] Caminho do logo: ${logoPath}`);
-      console.info(`[SignAPI] Logo existe: ${fs.existsSync(logoPath)}`);
-      
-      if (fs.existsSync(logoPath)) {
-        imageBase64 = await loadImageAsBase64(logoPath);
-        console.info(`[SignAPI] Logo carregado, tamanho base64: ${imageBase64.length} caracteres`);
-        
-        imageConfig = createSignatureImageConfig({
-          x: -35,
-          y: 10,
-          largura: 28,
-          altura: 14,
-          pagina: 'PRIMEIRA',
-          posicao: 'INFERIOR_DIREITO'
-        });
-        
-        textConfig = createSignatureTextConfig(
-          'Assinado digitalmente por Centro Médico de Saúde',
-          {
-            x: -35,
-            y: 26,
-            fonte: 'HELVETICA',
-            tamanho: 6,
-            pagina: 'PRIMEIRA'
-          }
-        );
-        
-        console.info('[SignAPI] Configuração de imagem:', JSON.stringify(imageConfig));
-        console.info('[SignAPI] Configuração de texto:', JSON.stringify(textConfig));
-      } else {
-        console.warn('[SignAPI] Arquivo de logo não encontrado, continuando sem imagem');
-      }
+      const now = new Date();
+      const dataHora = now.toLocaleString('pt-BR', { 
+        timeZone: 'America/Sao_Paulo',
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+
+      // Passo 2: Definir as dimensões e posição do QR Code (configuracao_imagem)
+      // A API utiliza o array configuracao_imagem para definir onde o QR Code vai ficar
+      imageConfig = createSignatureImageConfig({
+        altura: 22,
+        largura: 100, // Mantemos para o texto não quebrar
+        x: 1, // AUMENTE AQUI: Isso empurra todo o bloco (QR + Texto) para o lado direito da página
+        y: 15,
+        posicao: 'INFERIOR_ESQUERDO', // layout interno ficar perfeito
+        pagina: 'TODAS'
+      });
+      console.info('[SignAPI] Configuração de Imagem (Posição QR Code):', JSON.stringify(imageConfig));
+
+      // Passo 3: Enviar os dados do QR Code (configuracao_qrcode)
+      // Apenas o texto/URL é necessário aqui
+      qrCodeConfig = {
+        texto: `https://verificador.iti.gov.br/verifier-2.2/?doc=${fileName}&ts=${now.getTime()}`,
+        dimensao: 10,
+        margem: 0,
+        nivelCorrecaoErro: 'M',
+      };
+      console.info('[SignAPI] Configuração de Conteúdo QR Code:', JSON.stringify(qrCodeConfig));
+
+      // Passo 4: Manter o texto ao lado (configuracao_texto)
+      textConfig = createSignatureTextConfig(
+        `Assinado digitalmente por: \nMédico Exemplo \nCRM: 999.999 / SP \nData: ${dataHora} \nCentro Médico de Saúde Ocupacional \nScaneie o QR Code para validação.`,
+        {
+          pagina: 'TODAS',
+          fonte: 'HELVETICA',
+          tamanho: 8,
+          x: 1,  
+          y: 1   
+        }
+      );
+      console.info('[SignAPI] Configuração de Texto:', JSON.stringify(textConfig));
+
+      // Garantir que não enviamos imagem física
+      imageBase64 = undefined;
     } else {
       console.info('[SignAPI] Assinatura sem imagem (useSignatureImage = false)');
     }
 
-    const signedPdf = await signPdf(pdfBase64, fileName, kmsToken, kmsType, imageConfig, textConfig, imageBase64);
+    const signedPdf = await signPdf(pdfBase64, fileName, kmsToken, kmsType, imageConfig, textConfig, imageBase64, qrCodeConfig);
 
     console.info(`[SignAPI] PDF assinado com sucesso, retornando arquivo...`);
 

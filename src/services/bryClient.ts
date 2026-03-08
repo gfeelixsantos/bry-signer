@@ -24,6 +24,19 @@ export interface SignatureTextConfig {
   coordenadaY: number;
 }
 
+export interface SignatureQRCodeConfig {
+  texto: string;
+  dimensao: number;
+  margem?: number;
+  nivelCorrecaoErro?: 'L' | 'M' | 'Q' | 'H';
+  coordenadaX?: number;
+  coordenadaY?: number;
+  largura?: number;
+  altura?: number;
+  pagina?: number | 'TODAS' | 'PRIMEIRA' | 'ULTIMA';
+  posicao?: 'INFERIOR_DIREITO' | 'INFERIOR_ESQUERDO' | 'SUPERIOR_DIREITO' | 'SUPERIOR_ESQUERDO';
+}
+
 export type KmsType = 'BRYKMS' | 'PSC';
 
 class BryClient {
@@ -167,13 +180,20 @@ class BryClient {
     kmsType: KmsType = 'PSC',
     imageConfig?: SignatureImageConfig,
     textConfig?: SignatureTextConfig,
-    imageBase64?: string
+    imageBase64?: string,
+    qrCodeConfig?: SignatureQRCodeConfig
   ): Promise<ArrayBuffer> {
     console.info(`[BryClient] Enviando PDF para assinatura: ${fileName}`);
     console.info(`[BryClient] KMS Type: ${kmsType}`);
     console.info(`[BryClient] KMS Data: ${kmsToken}`);
     if (imageConfig) {
       console.info(`[BryClient] Configuração de imagem:`, JSON.stringify(imageConfig));
+    }
+    if (textConfig) {
+      console.info(`[BryClient] Configuração de texto:`, JSON.stringify(textConfig));
+    }
+    if (qrCodeConfig) {
+      console.info(`[BryClient] Configuração de QR Code:`, JSON.stringify(qrCodeConfig));
     }
     if (textConfig) {
       console.info(`[BryClient] Configuração de texto:`, JSON.stringify(textConfig));
@@ -217,10 +237,18 @@ class BryClient {
     }
 
     if (imageBase64) {
-      const imageBuffer = Buffer.from(imageBase64, 'base64');
-      const imageBlob = new Blob([imageBuffer], { type: 'image/png' });
-      formData.append('imagem', imageBlob, 'selo_assinatura.png');
-      console.info(`[BryClient] Imagem enviada no FormData (tamanho: ${imageBuffer.length} bytes)`);
+      // Passo 1: Remover o append de imagem conforme solicitado para uso de QR Code dinâmico
+      // const imageBuffer = Buffer.from(imageBase64, 'base64');
+      // const imageBlob = new Blob([imageBuffer], { type: 'image/png' });
+      // formData.append('imagem', imageBlob, 'selo_assinatura.png');
+      console.info(`[BryClient] Imagem NÃO enviada no FormData (configuração para QR Code dinâmico)`);
+    }
+
+    if (qrCodeConfig) {
+      const configQRCode = [qrCodeConfig];
+      // Passo 3: Enviar os dados do QR Code (configuracao_qrcode)
+      formData.append('configuracao_qrcode', JSON.stringify(configQRCode));
+      console.info(`[BryClient] configuracao_qrcode enviado: ${JSON.stringify(configQRCode)}`);
     }
 
     const token = await bryAuthService.getAccessToken();
