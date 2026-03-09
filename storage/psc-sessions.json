@@ -1,1 +1,20 @@
-{}
+{
+  "medico_1cead0ac-ecf3-40f5-a47d-4e6f9ba5abe0": {
+    "state": "1cead0ac-ecf3-40f5-a47d-4e6f9ba5abe0",
+    "pscName": "RemoteID",
+    "medicoId": "medico_1cead0ac-ecf3-40f5-a47d-4e6f9ba5abe0",
+    "signature_session": "NGQ2MWRiMDItNTk4Yy00YWYwLTlkYWItNDEzODc2NDZkYTBh",
+    "is_authorized": false,
+    "expires_in": 86400,
+    "created_at": "2026-03-09T16:31:02.981Z"
+  },
+  "medico_2fb2286c-8403-44e4-bd3d-53c9afa7b150": {
+    "state": "2fb2286c-8403-44e4-bd3d-53c9afa7b150",
+    "pscName": "BirdID",
+    "medicoId": "medico_2fb2286c-8403-44e4-bd3d-53c9afa7b150",
+    "signature_session": "NjA2MGFkYjUtNGNhYy00MzcwLTg0YTgtYzBmODk5ZjE5NzIy",
+    "is_authorized": false,
+    "expires_in": 86400,
+    "created_at": "2026-03-09T16:31:28.218Z"
+  }
+}

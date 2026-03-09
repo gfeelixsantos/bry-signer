@@ -126,14 +126,6 @@ export async function POST(request: NextRequest) {
       second: '2-digit'
     });
 
-    const assinaturaTexto = `Documento assinado digitalmente
-Certificado Digital ICP-Brasil
-
-Dr. Gustavo Casanova Pinho
-CRM-SP 258136
-
-Data: ${dataHoraAssinatura}`;
-
     if (useSignatureImage) {
       console.info('[SignAPI] Configurando assinatura com QR Code dinâmico...');
 
@@ -172,10 +164,10 @@ Data: ${dataHoraAssinatura}`;
       console.info('[SignAPI] Configurando assinatura visual com logo CMSO...');
 
       const configuracaoImagem = [{
-        altura: 20,
-        largura: 70,
+        altura: 12,
+        largura: 32,
         coordenadaX: 10,
-        coordenadaY: 10,
+        coordenadaY: 22,
         posicao: 'INFERIOR_ESQUERDO' as const,
         pagina: 'ULTIMA' as const
       }];
@@ -183,12 +175,16 @@ Data: ${dataHoraAssinatura}`;
       imageConfig = configuracaoImagem[0];
       console.info('[SignAPI] Configuração de Imagem:', JSON.stringify(imageConfig));
 
+      const assinaturaTextoCompacta = `Documento assinado digitalmente via Certificado Digital ICP-Brasil
+Dr. Gustavo Casanova Pinho - CRM-SP 258136
+Data: ${dataHoraAssinatura}`;
+
       const configuracaoTexto = [{
-        texto: assinaturaTexto,
-        tamanhoFonte: 9,
+        texto: assinaturaTextoCompacta,
+        tamanhoFonte: 8,
         fonte: 'HELVETICA' as const,
         coordenadaX: 10,
-        coordenadaY: 10,
+        coordenadaY: 22,
         pagina: 'ULTIMA' as const
       }];
 
