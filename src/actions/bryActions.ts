@@ -25,10 +25,16 @@ export async function listPSCs(): Promise<{ success: boolean; pscs?: Array<{ nam
 }
 
 export async function generateIntegrationLink(
-  pscName: string
+  pscName: string,
+  existingMedicoId?: string
 ): Promise<{ success: boolean; url?: string; state?: string; medicoId?: string; error?: string }> {
   try {
     console.info(`[ServerAction] Gerando link de integração para PSC: ${pscName}`);
+
+    if (existingMedicoId) {
+      console.info(`[ServerAction] Removendo sessão anterior para medico: ${existingMedicoId}`);
+      await pscSessionService.removeSession(existingMedicoId);
+    }
 
     const state = generateUUID();
     const medicoId = `medico_${state}`;
@@ -36,13 +42,16 @@ export async function generateIntegrationLink(
 
     const result = await bryClient.generateIntegrationLink(pscName, state);
 
+    const pscLifetime = parseInt(process.env.BRY_PSC_LIFETIME || '86400', 10);
+    console.info(`[ServerAction] Lifetime PSC configurado: ${pscLifetime} segundos`);
+
     await pscSessionService.saveSession(medicoId, {
       state,
       pscName,
       medicoId,
       signature_session: result.token,
       is_authorized: false,
-      expires_in: 86400,
+      expires_in: pscLifetime,
     });
 
     console.info(`[ServerAction] Token salvo com sucesso para medico: ${medicoId}`);

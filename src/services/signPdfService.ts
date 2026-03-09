@@ -10,7 +10,8 @@ export async function signPdf(
   imageConfig?: SignatureImageConfig,
   textConfig?: SignatureTextConfig,
   imageBase64?: string,
-  qrCodeConfig?: SignatureQRCodeConfig
+  qrCodeConfig?: SignatureQRCodeConfig,
+  signatureImageBuffer?: ArrayBuffer
 ): Promise<ArrayBuffer> {
   console.info(`[SignPdfService] Iniciando assinatura do arquivo: ${fileName}`);
   console.info(`[SignPdfService] KMS Type: ${kmsType}`);
@@ -33,7 +34,8 @@ export async function signPdf(
     imageConfig,
     textConfig,
     imageBase64,
-    qrCodeConfig
+    qrCodeConfig,
+    signatureImageBuffer
   );
 
   console.info(`[SignPdfService] Assinatura concluída com sucesso`);

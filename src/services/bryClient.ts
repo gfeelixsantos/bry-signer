@@ -182,6 +182,7 @@ class BryClient {
     }) as { url: string; token: string };
 
     console.info(`[BryClient] Link de integração gerado com sucesso`);
+    console.info(`[BryClient] Token retornado: length=${response.token?.length}, prefix=${response.token?.substring(0, 20)}...`);
     return response;
   }
 
@@ -194,6 +195,7 @@ class BryClient {
     textConfig?: SignatureTextConfig,
     imageBase64?: string,
     qrCodeConfig?: SignatureQRCodeConfig,
+    signatureImageBuffer?: ArrayBuffer,
     retryCount = 0
   ): Promise<ArrayBuffer> {
     console.info(`[BryClient] Enviando PDF para assinatura: ${fileName}`);
@@ -286,6 +288,14 @@ class BryClient {
       console.info(`[BryClient] configuracao_qrcode enviado: ${JSON.stringify(configQRCode)}`);
     }
 
+    if (signatureImageBuffer) {
+      formData.append('imagem', Buffer.from(signatureImageBuffer), {
+        filename: 'logo-cmso.png',
+        contentType: 'image/png'
+      });
+      console.info('[BryClient] LogoCMSO enviado como imagem no FormData');
+    }
+
     const token = await bryAuthService.getAccessToken();
     const url = `${this.getHubUrl()}/fw/v1/pdf/kms/lote/assinaturas`;
 
@@ -311,10 +321,15 @@ class BryClient {
           const errorData = Buffer.from(axiosError.response.data).toString('utf-8');
           console.error(`[BryClient] Erro na assinatura: ${axiosError.response.status} - ${errorData}`);
           
+          if (errorData.includes('expired or completed') || errorData.includes('operation for id not found')) {
+            console.error(`[BryClient] ERRO CRÍTICO: Token PSC expirado ou já utilizado. Requer nova autenticação.`);
+            throw new Error('TOKEN_EXPIRED_OR_CONSUMED: Token PSC expirado, consumido ou já utilizado. Autentique-se novamente.');
+          }
+          
           if (axiosError.response.status === 401 && retryCount === 0) {
             console.info('[BryClient] Token OAuth expirado (401), limpando cache e tentando novamente...');
             bryAuthService.clearCache();
-            return this.signPdf(pdfBuffer, fileName, kmsToken, kmsType, imageConfig, textConfig, imageBase64, qrCodeConfig, retryCount + 1);
+            return this.signPdf(pdfBuffer, fileName, kmsToken, kmsType, imageConfig, textConfig, imageBase64, qrCodeConfig, signatureImageBuffer, retryCount + 1);
           }
           
           throw new Error(`Falha ao assinar PDF: ${axiosError.response.status} - ${errorData}`);

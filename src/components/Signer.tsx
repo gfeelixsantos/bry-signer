@@ -142,7 +142,8 @@ export default function Signer() {
     setLoading(true);
     setError('');
     try {
-      const result = await generateIntegrationLink(selectedPsc);
+      const existingMedicoId = hasPersistedToken ? medicoId : undefined;
+      const result = await generateIntegrationLink(selectedPsc, existingMedicoId);
       if (result.success && result.url && result.state && result.medicoId) {
         setQrCodeUrl(result.url);
         setMedicoId(result.medicoId);
@@ -201,6 +202,16 @@ export default function Signer() {
 
       if (!response.ok) {
         const errorData = await response.json();
+        
+        if (errorData.code === 'PSC_SESSION_INVALID') {
+          setHasPersistedToken(false);
+          setMedicoId('');
+          setError('Sessão PSC expirada ou consumida. Por favor, autentique-se novamente.');
+          setStep('upload');
+          await loadPSCs();
+          return;
+        }
+        
         throw new Error(errorData.error || 'Erro ao assinar PDF');
       }
 
