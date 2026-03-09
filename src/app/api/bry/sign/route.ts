@@ -37,17 +37,34 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      kmsToken = await pscSessionService.getValidToken(medicoId);
+      const session = await pscSessionService.getSessionByMedicoId(medicoId);
       
-      if (!kmsToken) {
-        console.error(`[SignAPI] Nenhuma sessão válida encontrada para medico: ${medicoId}`);
+      if (!session) {
+        console.error(`[SignAPI] Nenhuma sessão encontrada para medico: ${medicoId}`);
         return NextResponse.json(
           { error: 'Sessão PSC não encontrada ou expirada. Autentique-se novamente.' },
           { status: 401 }
         );
       }
       
-      console.info(`[SignAPI] Token PSC recuperado do storage para medico: ${medicoId}`);
+      if (!session.is_authorized) {
+        console.error(`[SignAPI] Sessão não autorizada para medico: ${medicoId}`);
+        return NextResponse.json(
+          { error: 'Sessão PSC não autorizada. Complete a autenticação no celular.' },
+          { status: 401 }
+        );
+      }
+      
+      if (!session.signature_session || typeof session.signature_session !== 'string' || !session.signature_session.trim()) {
+        console.error(`[SignAPI] Token inválido para medico: ${medicoId}`);
+        return NextResponse.json(
+          { error: 'Token de assinatura inválido. Autentique-se novamente.' },
+          { status: 401 }
+        );
+      }
+      
+      kmsToken = session.signature_session;
+      console.info(`[SignAPI] Token PSC recuperado do storage para medico: ${medicoId}, token length: ${kmsToken.length}`);
     } else {
       console.error('[SignAPI] BRYKMS não suportado nesta rota');
       return NextResponse.json(

@@ -26,7 +26,7 @@ export async function listPSCs(): Promise<{ success: boolean; pscs?: Array<{ nam
 
 export async function generateIntegrationLink(
   pscName: string
-): Promise<{ success: boolean; url?: string; token?: string; state?: string; medicoId?: string; error?: string }> {
+): Promise<{ success: boolean; url?: string; state?: string; medicoId?: string; error?: string }> {
   try {
     console.info(`[ServerAction] Gerando link de integração para PSC: ${pscName}`);
 
@@ -36,10 +36,20 @@ export async function generateIntegrationLink(
 
     const result = await bryClient.generateIntegrationLink(pscName, state);
 
+    await pscSessionService.saveSession(medicoId, {
+      state,
+      pscName,
+      medicoId,
+      signature_session: result.token,
+      is_authorized: false,
+      expires_in: 86400,
+    });
+
+    console.info(`[ServerAction] Token salvo com sucesso para medico: ${medicoId}`);
+
     return {
       success: true,
       url: result.url,
-      token: result.token,
       state,
       medicoId,
     };
@@ -50,14 +60,14 @@ export async function generateIntegrationLink(
   }
 }
 
-export async function checkSavedPscToken(medicoId?: string): Promise<{ success: boolean; token?: string; isValid?: boolean; medicoId?: string; error?: string }> {
+export async function checkSavedPscToken(medicoId?: string): Promise<{ success: boolean; hasValidSession?: boolean; medicoId?: string; error?: string }> {
   try {
-    console.info('[ServerAction] Verificando se existe token PSC salvo...');
+    console.info('[ServerAction] Verificando se existe sessão PSC válida...');
     
     if (medicoId) {
-      const session = await pscSessionService.getSession(medicoId);
-      if (session) {
-        return { success: true, token: session.signature_session, isValid: true, medicoId };
+      const session = await pscSessionService.getSessionByMedicoId(medicoId);
+      if (session && session.is_authorized) {
+        return { success: true, hasValidSession: true, medicoId };
       }
     }
     
@@ -66,10 +76,12 @@ export async function checkSavedPscToken(medicoId?: string): Promise<{ success: 
     
     if (firstMedicoId) {
       const session = allSessions[firstMedicoId];
-      return { success: true, token: session.signature_session, isValid: true, medicoId: firstMedicoId };
+      if (session.is_authorized) {
+        return { success: true, hasValidSession: true, medicoId: firstMedicoId };
+      }
     }
 
-    return { success: true, token: undefined, isValid: false };
+    return { success: true, hasValidSession: false };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Erro desconhecido';
     console.error(`[ServerAction] Erro ao buscar token: ${message}`);

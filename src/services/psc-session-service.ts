@@ -4,8 +4,11 @@ import path from 'path';
 const STORAGE_FILE = path.join(process.cwd(), 'storage', 'psc-sessions.json');
 
 export interface PscSession {
+  state: string;
   pscName: string;
+  medicoId: string;
   signature_session: string;
+  is_authorized: boolean;
   created_at: string;
   expires_in: number;
 }
@@ -38,10 +41,41 @@ class PscSessionService {
     };
 
     await this.writeStorage(storage);
-    console.info(`[PscSessionService] Session saved for medico: ${medicoId}, PSC: ${session.pscName}`);
+    console.info(`[PscSessionService] Session saved for medico: ${medicoId}, PSC: ${session.pscName}, authorized: ${session.is_authorized}`);
   }
 
-  async getSession(medicoId: string): Promise<PscSession | null> {
+  async updateAuthorization(medicoId: string, isAuthorized: boolean): Promise<void> {
+    const storage = await this.readStorage();
+    
+    if (!storage[medicoId]) {
+      console.error(`[PscSessionService] Session not found for medico: ${medicoId}`);
+      return;
+    }
+
+    storage[medicoId].is_authorized = isAuthorized;
+    await this.writeStorage(storage);
+    console.info(`[PscSessionService] Authorization updated for medico: ${medicoId}, authorized: ${isAuthorized}`);
+  }
+
+  async findSessionByState(state: string): Promise<PscSession | null> {
+    const storage = await this.readStorage();
+    
+    for (const [medicoId, session] of Object.entries(storage)) {
+      if (session.state === state) {
+        if (this.isExpired(session)) {
+          console.info(`[PscSessionService] Session expired for state: ${state}`);
+          return null;
+        }
+        console.info(`[PscSessionService] Session found by state: ${state}, medicoId: ${medicoId}`);
+        return session;
+      }
+    }
+    
+    console.info(`[PscSessionService] No session found for state: ${state}`);
+    return null;
+  }
+
+  async getSessionByMedicoId(medicoId: string): Promise<PscSession | null> {
     const storage = await this.readStorage();
     const session = storage[medicoId];
 
@@ -77,7 +111,7 @@ class PscSessionService {
   }
 
   async getValidToken(medicoId: string): Promise<string | null> {
-    const session = await this.getSession(medicoId);
+    const session = await this.getSessionByMedicoId(medicoId);
     
     if (!session) {
       return null;

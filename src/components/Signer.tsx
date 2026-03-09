@@ -26,7 +26,7 @@ export default function Signer() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>('');
   const [hasPersistedToken, setHasPersistedToken] = useState(false);
-  const [signatureMethod, setSignatureMethod] = useState<SignatureMethod>('BRYKMS');
+  const [signatureMethod, setSignatureMethod] = useState<SignatureMethod>('PSC');
   const [useSignatureImage, setUseSignatureImage] = useState(true);
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -77,7 +77,7 @@ export default function Signer() {
       
       const tokenResult = await checkSavedPscToken();
 
-      if (tokenResult.success && tokenResult.medicoId) {
+      if (tokenResult.success && tokenResult.hasValidSession && tokenResult.medicoId) {
         setMedicoId(tokenResult.medicoId);
         setHasPersistedToken(true);
         setLoading(false);
@@ -143,7 +143,7 @@ export default function Signer() {
     setError('');
     try {
       const result = await generateIntegrationLink(selectedPsc);
-      if (result.success && result.url && result.token && result.state && result.medicoId) {
+      if (result.success && result.url && result.state && result.medicoId) {
         setQrCodeUrl(result.url);
         setMedicoId(result.medicoId);
         setStep('link');
@@ -164,7 +164,7 @@ export default function Signer() {
         const response = await fetch(`/api/bry/status?state=${state}`);
         const data = await response.json();
 
-        if (data.validated) {
+        if (data.authorized) {
           if (pollingRef.current) {
             clearInterval(pollingRef.current);
           }

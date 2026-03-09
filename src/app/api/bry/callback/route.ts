@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { setSessionValidated, getSessionData } from '@/services/sessionManager';
+import { setSessionValidated } from '@/services/sessionManager';
 import { pscSessionService } from '@/services/psc-session-service';
 
 const HTML_RESPONSE = `<!DOCTYPE html>
@@ -62,9 +62,8 @@ const HTML_RESPONSE = `<!DOCTYPE html>
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const state = searchParams.get('state');
-  const token = searchParams.get('token');
 
-  console.info(`[Callback] Recebido callback com state: ${state} e token presente: ${!!token}`);
+  console.info(`[Callback] Recebido callback com state: ${state}`);
 
   if (!state) {
     console.error('[Callback] State não fornecido');
@@ -74,19 +73,18 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  if (token) {
-    const sessionData = getSessionData(state);
-    const pscName = sessionData?.pscName || 'Unknown';
-    const medicoId = sessionData?.medicoId || state;
-    
-    await pscSessionService.saveSession(medicoId, {
-      pscName,
-      signature_session: token,
-      expires_in: 86400,
-    });
-  } else {
-    console.warn('[Callback] Token não foi retornado pelo PSC na URL.');
+  const session = await pscSessionService.findSessionByState(state);
+
+  if (!session) {
+    console.error(`[Callback] Sessão não encontrada para state: ${state}`);
+    return new NextResponse(
+      '<html><body><h1>Erro</h1><p>Sessão não encontrada.</p></body></html>',
+      { status: 404, headers: { 'Content-Type': 'text/html' } }
+    );
   }
+
+  await pscSessionService.updateAuthorization(session.medicoId, true);
+  console.info(`[Callback] Sessão autorizada para medico: ${session.medicoId}`);
 
   setSessionValidated(state);
 

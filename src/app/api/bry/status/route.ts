@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { isSessionValidated } from '@/services/sessionManager';
+import { pscSessionService } from '@/services/psc-session-service';
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
@@ -15,9 +15,16 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const validated = isSessionValidated(state);
+  const session = await pscSessionService.findSessionByState(state);
 
-  console.info(`[Status] State ${state} validado: ${validated}`);
+  if (!session) {
+    console.info(`[Status] Sessão não encontrada para state: ${state}`);
+    return NextResponse.json({ authorized: false });
+  }
 
-  return NextResponse.json({ validated });
+  const authorized = session.is_authorized;
+
+  console.info(`[Status] State ${state} autorizado: ${authorized}`);
+
+  return NextResponse.json({ authorized });
 }

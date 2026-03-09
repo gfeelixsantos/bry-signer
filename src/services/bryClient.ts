@@ -1,5 +1,6 @@
 import { bryAuthService } from './bryAuthService';
 import axios from 'axios';
+import FormData from 'form-data';
 
 interface BryErrorResponse {
   chave?: string;
@@ -210,6 +211,15 @@ class BryClient {
       console.info(`[BryClient] Configuração de texto:`, JSON.stringify(textConfig));
     }
 
+    if (!kmsToken || typeof kmsToken !== 'string' || !kmsToken.trim()) {
+      throw new Error('Token PSC inválido para assinatura.');
+    }
+
+    const integraUrl = this.getIntegraUrl();
+    if (!integraUrl || typeof integraUrl !== 'string' || !integraUrl.trim()) {
+      throw new Error('URL do Integra BRy inválida para assinatura PSC.');
+    }
+
     let kmsDataObject: Record<string, string>;
     
     if (kmsType === 'BRYKMS') {
@@ -220,19 +230,38 @@ class BryClient {
         throw new Error('kmsToken inválido para BRYKMS - deve ser um JSON válido');
       }
     } else {
-      kmsDataObject = { signature_session: kmsToken };
+      kmsDataObject = { 
+        token: kmsToken,
+        url: integraUrl 
+      };
     }
 
     const configAssinatura = {
-      perfil: 'Completa',
+      perfil: 'COMPLETA',
       algoritmoHash: 'SHA256',
-      kms_type: kmsType,
+      formatoAssinatura: 'PADES',
       kms_data: kmsDataObject
     };
 
+    console.info(`[BryClient] ===== DIAGNÓSTICO DE ASSINATURA =====`);
+    console.info(`[BryClient] KMS Type: ${kmsType}`);
+    console.info(`[BryClient] Token PSC presente: ${!!kmsToken}, length: ${kmsToken.length}`);
+    console.info(`[BryClient] URL Integra presente: ${!!integraUrl}`);
+    console.info(`[BryClient] URL Integra: ${integraUrl}`);
+    console.info(`[BryClient] PDF buffer size: ${pdfBuffer.byteLength} bytes`);
+    console.info(`[BryClient] perfil: ${configAssinatura.perfil}`);
+    console.info(`[BryClient] algoritmoHash: ${configAssinatura.algoritmoHash}`);
+    console.info(`[BryClient] formatoAssinatura: ${configAssinatura.formatoAssinatura}`);
+    console.info(`[BryClient] kms_data.token presente: ${!!configAssinatura.kms_data.token}`);
+    console.info(`[BryClient] kms_data.token length: ${configAssinatura.kms_data.token?.length || 0}`);
+    console.info(`[BryClient] kms_data.url presente: ${!!configAssinatura.kms_data.url}`);
+    console.info(`[BryClient] =======================================`);
+
     const formData = new FormData();
-    const pdfBlob = new Blob([pdfBuffer], { type: 'application/pdf' });
-    formData.append('documento', pdfBlob, fileName);
+    formData.append('documento', Buffer.from(pdfBuffer), {
+      filename: fileName,
+      contentType: 'application/pdf'
+    });
     formData.append('dados_assinatura', JSON.stringify(configAssinatura));
 
     if (imageConfig) {
@@ -261,31 +290,47 @@ class BryClient {
     const url = `${this.getHubUrl()}/fw/v1/pdf/kms/lote/assinaturas`;
 
     console.info(`[BryClient] Request URL: ${url}`);
+    console.info(`[BryClient] Headers: Authorization: Bearer ***, kms_type: PSC`);
 
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'kms_type': kmsType,
-        'kms_data': JSON.stringify(kmsDataObject),
-        'accept': 'application/json',
-      },
-      body: formData,
-    });
-
-    console.info(`[BryClient] Response Status: ${response.status}`);
-
-    if (response.status === 401 && retryCount === 0) {
-      console.info('[BryClient] Token OAuth expirado (401) na assinatura, limpando cache e tentando novamente...');
-      bryAuthService.clearCache();
-      return this.signPdf(pdfBuffer, fileName, kmsToken, kmsType, imageConfig, textConfig, imageBase64, qrCodeConfig, retryCount + 1);
+    let response;
+    try {
+      response = await axios.post(url, formData, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'kms_type': 'PSC',
+          ...formData.getHeaders()
+        },
+        responseType: 'arraybuffer',
+        maxBodyLength: Infinity,
+        maxContentLength: Infinity
+      });
+    } catch (error: unknown) {
+      if (axios.isAxiosError(error)) {
+        const axiosError = error;
+        if (axiosError.response) {
+          const errorData = Buffer.from(axiosError.response.data).toString('utf-8');
+          console.error(`[BryClient] Erro na assinatura: ${axiosError.response.status} - ${errorData}`);
+          
+          if (axiosError.response.status === 401 && retryCount === 0) {
+            console.info('[BryClient] Token OAuth expirado (401), limpando cache e tentando novamente...');
+            bryAuthService.clearCache();
+            return this.signPdf(pdfBuffer, fileName, kmsToken, kmsType, imageConfig, textConfig, imageBase64, qrCodeConfig, retryCount + 1);
+          }
+          
+          throw new Error(`Falha ao assinar PDF: ${axiosError.response.status} - ${errorData}`);
+        }
+      }
+      throw error;
     }
 
-    const contentType = response.headers.get('content-type') || '';
+    console.info(`[BryClient] Response Status: ${response.status}`);
+    console.info(`[BryClient] Response Content-Type: ${response.headers['content-type']}`);
+
+    const contentType = response.headers['content-type'] || '';
     console.info(`[BryClient] Content-Type: ${contentType}`);
 
-    if (!response.ok) {
-      const errorText = await response.text();
+    if (response.status !== 200 && response.status !== 201) {
+      const errorText = Buffer.from(response.data).toString('utf-8');
       console.error(`[BryClient] Erro na assinatura: ${errorText}`);
       throw new Error(`Falha ao assinar PDF: ${response.status} - ${errorText}`);
     }
@@ -293,7 +338,7 @@ class BryClient {
     let arrayBuffer: ArrayBuffer;
 
     if (contentType.includes('application/json')) {
-      const jsonResponse = await response.json();
+      const jsonResponse = JSON.parse(Buffer.from(response.data).toString('utf-8'));
       console.info(`[BryClient] Resposta JSON recebida`);
       
       const document = jsonResponse.documentos?.[0];
@@ -301,17 +346,14 @@ class BryClient {
         const downloadUrl = document.links[0].href;
         console.info(`[BryClient] Baixando PDF assinado...`);
         
-        const downloadResponse = await fetch(downloadUrl, {
+        const downloadResponse = await axios.get(downloadUrl, {
           headers: {
             'Authorization': `Bearer ${token}`,
           },
+          responseType: 'arraybuffer'
         });
         
-        if (!downloadResponse.ok) {
-          throw new Error(`Falha ao baixar PDF assinado: ${downloadResponse.status}`);
-        }
-        
-        arrayBuffer = await downloadResponse.arrayBuffer();
+        arrayBuffer = downloadResponse.data;
       } else if (jsonResponse.conteudo || jsonResponse.pdf || jsonResponse.documento) {
         const base64Data = jsonResponse.conteudo || jsonResponse.pdf || jsonResponse.documento;
         const buffer = Buffer.from(base64Data, 'base64');
@@ -320,7 +362,7 @@ class BryClient {
         throw new Error('Resposta JSON não contém link de download');
       }
     } else {
-      arrayBuffer = await response.arrayBuffer();
+      arrayBuffer = response.data;
     }
 
     console.info(`[BryClient] PDF assinado com sucesso, tamanho: ${arrayBuffer.byteLength} bytes`);
