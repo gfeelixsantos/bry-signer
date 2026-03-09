@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { setSessionValidated, getSessionData } from '@/services/sessionManager';
-import { pscSessionService } from '@/services/PscSessionService';
+import { pscSessionService } from '@/services/psc-session-service';
 
 const HTML_RESPONSE = `<!DOCTYPE html>
 <html>

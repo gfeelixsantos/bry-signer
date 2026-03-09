@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { signPdf, loadImageAsBase64, createSignatureImageConfig, createSignatureTextConfig, createSignatureQRCodeConfig } from '@/services/signPdfService';
 import { KmsType, SignatureImageConfig, SignatureTextConfig, SignatureQRCodeConfig } from '@/services/bryClient';
-import { pscSessionService } from '@/services/PscSessionService';
+import { pscSessionService } from '@/services/psc-session-service';
 import fs from 'fs';
 import path from 'path';
 

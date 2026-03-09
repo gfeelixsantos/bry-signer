@@ -2,7 +2,7 @@
 
 import { bryClient } from '@/services/bryClient';
 import { createSession } from '@/services/sessionManager';
-import { pscSessionService } from '@/services/PscSessionService';
+import { pscSessionService } from '@/services/psc-session-service';
 
 function generateUUID(): string {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
