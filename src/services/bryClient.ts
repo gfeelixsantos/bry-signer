@@ -93,7 +93,8 @@ class BryClient {
 
   private async makeAuthenticatedRequest(
     endpoint: string,
-    options: RequestInit & { useHubUrl?: boolean } = {}
+    options: RequestInit & { useHubUrl?: boolean } = {},
+    retryCount = 0
   ): Promise<unknown> {
     const { useHubUrl = false, ...fetchOptions } = options;
     const baseUrl = useHubUrl ? this.getHubUrl() : this.getIntegraUrl();
@@ -102,7 +103,6 @@ class BryClient {
     const token = await bryAuthService.getAccessToken();
 
     console.info(`[BryClient] Request: ${options.method || 'GET'} ${url}`);
-    console.info(`[BryClient] Headers: Authorization: Bearer ${token.substring(0, 20)}...`);
 
     try {
       const response = await fetch(url, {
@@ -114,6 +114,12 @@ class BryClient {
       });
 
       console.info(`[BryClient] Response Status: ${response.status}`);
+
+      if (response.status === 401 && retryCount === 0) {
+        console.info('[BryClient] Token expirado (401), limpando cache e tentando novamente...');
+        bryAuthService.clearCache();
+        return this.makeAuthenticatedRequest(endpoint, options, retryCount + 1);
+      }
 
       if (!response.ok) {
         const errorText = await response.text();
@@ -186,11 +192,11 @@ class BryClient {
     imageConfig?: SignatureImageConfig,
     textConfig?: SignatureTextConfig,
     imageBase64?: string,
-    qrCodeConfig?: SignatureQRCodeConfig
+    qrCodeConfig?: SignatureQRCodeConfig,
+    retryCount = 0
   ): Promise<ArrayBuffer> {
     console.info(`[BryClient] Enviando PDF para assinatura: ${fileName}`);
     console.info(`[BryClient] KMS Type: ${kmsType}`);
-    console.info(`[BryClient] KMS Data: ${kmsToken}`);
     if (imageConfig) {
       console.info(`[BryClient] Configuração de imagem:`, JSON.stringify(imageConfig));
     }
@@ -214,7 +220,7 @@ class BryClient {
         throw new Error('kmsToken inválido para BRYKMS - deve ser um JSON válido');
       }
     } else {
-      kmsDataObject = { token: kmsToken };
+      kmsDataObject = { signature_session: kmsToken };
     }
 
     const configAssinatura = {
@@ -242,16 +248,11 @@ class BryClient {
     }
 
     if (imageBase64) {
-      // Passo 1: Remover o append de imagem conforme solicitado para uso de QR Code dinâmico
-      // const imageBuffer = Buffer.from(imageBase64, 'base64');
-      // const imageBlob = new Blob([imageBuffer], { type: 'image/png' });
-      // formData.append('imagem', imageBlob, 'selo_assinatura.png');
       console.info(`[BryClient] Imagem NÃO enviada no FormData (configuração para QR Code dinâmico)`);
     }
 
     if (qrCodeConfig) {
       const configQRCode = [qrCodeConfig];
-      // Passo 3: Enviar os dados do QR Code (configuracao_qrcode)
       formData.append('configuracao_qrcode', JSON.stringify(configQRCode));
       console.info(`[BryClient] configuracao_qrcode enviado: ${JSON.stringify(configQRCode)}`);
     }
@@ -260,7 +261,6 @@ class BryClient {
     const url = `${this.getHubUrl()}/fw/v1/pdf/kms/lote/assinaturas`;
 
     console.info(`[BryClient] Request URL: ${url}`);
-    console.info(`[BryClient] Auth token: ${token.substring(0, 20)}...`);
 
     const response = await fetch(url, {
       method: 'POST',
@@ -275,6 +275,12 @@ class BryClient {
 
     console.info(`[BryClient] Response Status: ${response.status}`);
 
+    if (response.status === 401 && retryCount === 0) {
+      console.info('[BryClient] Token OAuth expirado (401) na assinatura, limpando cache e tentando novamente...');
+      bryAuthService.clearCache();
+      return this.signPdf(pdfBuffer, fileName, kmsToken, kmsType, imageConfig, textConfig, imageBase64, qrCodeConfig, retryCount + 1);
+    }
+
     const contentType = response.headers.get('content-type') || '';
     console.info(`[BryClient] Content-Type: ${contentType}`);
 
@@ -288,12 +294,12 @@ class BryClient {
 
     if (contentType.includes('application/json')) {
       const jsonResponse = await response.json();
-      console.info(`[BryClient] Resposta JSON completa:`, JSON.stringify(jsonResponse));
+      console.info(`[BryClient] Resposta JSON recebida`);
       
       const document = jsonResponse.documentos?.[0];
       if (document?.links?.[0]?.href) {
         const downloadUrl = document.links[0].href;
-        console.info(`[BryClient] Baixando PDF de: ${downloadUrl}`);
+        console.info(`[BryClient] Baixando PDF assinado...`);
         
         const downloadResponse = await fetch(downloadUrl, {
           headers: {

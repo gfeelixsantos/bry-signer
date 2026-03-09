@@ -21,7 +21,7 @@ export default function Signer() {
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [pdfBase64, setPdfBase64] = useState<string>('');
   const [qrCodeUrl, setQrCodeUrl] = useState<string>('');
-  const [kmsToken, setKmsToken] = useState<string>('');
+  const [medicoId, setMedicoId] = useState<string>('');
   const [kmsType, setKmsType] = useState<KmsType>('PSC');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>('');
@@ -70,15 +70,15 @@ export default function Signer() {
       if (signatureMethod === 'BRYKMS') {
         setKmsType('BRYKMS');
         setHasPersistedToken(false);
-        setKmsToken('');
+        setMedicoId('');
         setLoading(false);
         return;
       }
       
       const tokenResult = await checkSavedPscToken();
 
-      if (tokenResult.success && tokenResult.token) {
-        setKmsToken(tokenResult.token);
+      if (tokenResult.success && tokenResult.medicoId) {
+        setMedicoId(tokenResult.medicoId);
         setHasPersistedToken(true);
         setLoading(false);
       } else {
@@ -133,7 +133,7 @@ export default function Signer() {
       return;
     }
 
-    if (hasPersistedToken && kmsToken) {
+    if (hasPersistedToken && medicoId) {
       setStep('signing');
       await performSignature();
       return;
@@ -143,9 +143,9 @@ export default function Signer() {
     setError('');
     try {
       const result = await generateIntegrationLink(selectedPsc);
-      if (result.success && result.url && result.token && result.state) {
+      if (result.success && result.url && result.token && result.state && result.medicoId) {
         setQrCodeUrl(result.url);
-        setKmsToken(result.token);
+        setMedicoId(result.medicoId);
         setStep('link');
         startPolling(result.state);
       } else {
@@ -178,7 +178,7 @@ export default function Signer() {
   };
 
   const performSignature = async () => {
-    if (!pdfBase64 || !pdfFile || !kmsToken) {
+    if (!pdfBase64 || !pdfFile || !medicoId) {
       setError('Dados da assinatura incompletos');
       setStep('upload');
       return;
@@ -191,7 +191,7 @@ export default function Signer() {
       const formData = new FormData();
       formData.append('pdfBase64', pdfBase64);
       formData.append('fileName', pdfFile.name);
-      formData.append('kmsToken', kmsToken);
+      formData.append('medicoId', medicoId);
       formData.append('kmsType', kmsType);
 
       const response = await fetch('/api/bry/sign', {
@@ -228,7 +228,7 @@ export default function Signer() {
     setSignatureMethod(method);
     setSelectedPsc('');
     setHasPersistedToken(false);
-    setKmsToken('');
+    setMedicoId('');
     setError('');
     if (pollingRef.current) {
       clearInterval(pollingRef.current);
@@ -257,7 +257,6 @@ export default function Signer() {
       
       console.info('[Signer] Token BRYKMS obtido, iniciando assinatura...');
       console.info(`[Signer] KMS Type: ${data.kmsType}`);
-      console.info(`[Signer] KMS Token: ${data.token.substring(0, 30)}...`);
       console.info(`[Signer] Use Signature Image: ${useSignatureImage}`);
       
       setKmsType('BRYKMS');
@@ -314,10 +313,10 @@ export default function Signer() {
     setPdfBase64('');
     setQrCodeUrl('');
     setError('');
-    // Notice we do NOT clear the kmsToken here if hasPersistedToken is true, 
-    // so the persisted token can be utilized for consecutive signatures without refreshing.
+    // Notice we do NOT clear the medicoId here if hasPersistedToken is true, 
+    // so the persisted session can be utilized for consecutive signatures without refreshing.
     if (!hasPersistedToken) {
-      setKmsToken('');
+      setMedicoId('');
     }
     if (pollingRef.current) {
       clearInterval(pollingRef.current);
@@ -524,6 +523,12 @@ export default function Signer() {
             className="block w-full bg-purple-600 text-white py-3 px-6 rounded-lg font-medium hover:bg-purple-700 transition-colors text-center"
           >
             Verificar Documento PDF
+          </Link>
+          <Link
+            href="/validate-document"
+            className="block w-full bg-blue-600 text-white py-3 px-6 rounded-lg font-medium hover:bg-blue-700 transition-colors text-center"
+          >
+            Validar Documento por UUID
           </Link>
         </div>
       </div>

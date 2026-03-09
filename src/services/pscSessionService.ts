@@ -1,339 +1,109 @@
-import { 
-  PscSessionData, 
-  PscSessionValidationResult, 
-  PscRefreshResult, 
-  PscTokenResponse,
-  TOKEN_EXPIRY_MARGIN 
-} from '@/types/pscSession';
-import { SecureStorage } from './secureStorage';
-import { SecureLogger } from './securityLogger';
+import fs from 'fs/promises';
+import path from 'path';
 
-/**
- * Serviço principal de gerenciamento de sessão PSC (Cloud PKI)
- * Implementa verificação de validade, refresh automático e armazenamento seguro
- */
-export class PscSessionService {
-  private static instance: PscSessionService;
-  private sessionCache: PscSessionData | null = null;
-  private lastValidation: number = 0;
-  private readonly CACHE_DURATION = 30000; // 30 segundos
+const STORAGE_FILE = path.join(process.cwd(), 'storage', 'psc-sessions.json');
 
-  private constructor() {}
+export interface PscSession {
+  pscName: string;
+  signature_session: string;
+  created_at: string;
+  expires_in: number;
+}
 
-  static getInstance(): PscSessionService {
-    if (!PscSessionService.instance) {
-      PscSessionService.instance = new PscSessionService();
-    }
-    return PscSessionService.instance;
-  }
+export interface PscSessionsStorage {
+  [medicoId: string]: PscSession;
+}
 
-  /**
-   * Salva dados da sessão PSC após autenticação bem-sucedida
-   */
-  async saveSession(
-    medicoState: string,
-    tokenResponse: PscTokenResponse,
-    provider: string
-  ): Promise<void> {
+class PscSessionService {
+  private async readStorage(): Promise<PscSessionsStorage> {
     try {
-      const sessionData: PscSessionData = {
-        access_token: tokenResponse.access_token,
-        expires_in: tokenResponse.expires_in || 86400, // 24h default
-        refresh_token: tokenResponse.refresh_token,
-        provider,
-        created_at: Date.now(),
-        medico_state: medicoState,
-        kms_type: 'PSC'
-      };
-
-      // Salva de forma criptografada
-      await SecureStorage.saveSession(sessionData);
-      
-      // Atualiza cache
-      this.sessionCache = sessionData;
-      this.lastValidation = Date.now();
-
-      SecureLogger.tokenOperation('session_saved', tokenResponse.access_token.length, provider);
-      SecureLogger.info('PSC session saved successfully', {
-        state: medicoState,
-        provider,
-        expiresIn: sessionData.expires_in
-      });
+      const content = await fs.readFile(STORAGE_FILE, 'utf-8');
+      return JSON.parse(content) as PscSessionsStorage;
     } catch (error) {
-      SecureLogger.error('Failed to save PSC session', error);
-      throw new Error('Failed to save session data');
+      console.info('[PscSessionService] Storage file not found or empty, returning empty object');
+      return {};
     }
   }
 
-  /**
-   * Verifica validade da sessão atual (pre-flight check)
-   * Implementa margem de segurança de 60 segundos
-   */
-  async checkSessionValidity(): Promise<PscSessionValidationResult> {
-    try {
-      // Usa cache se recente
-      const now = Date.now();
-      if (this.sessionCache && (now - this.lastValidation) < this.CACHE_DURATION) {
-        const isValid = this.isSessionValid(this.sessionCache);
-        return {
-          isValid,
-          sessionData: isValid ? this.sessionCache : undefined,
-          reason: isValid ? undefined : 'expired',
-          canRefresh: !isValid && !!this.sessionCache.refresh_token,
-          remainingTime: isValid ? this.calculateRemainingTime(this.sessionCache) : undefined
-        };
-      }
-
-      // Carrega do armazenamento
-      const sessionData = await SecureStorage.loadSession();
-      
-      if (!sessionData) {
-        SecureLogger.sessionValidation('unknown', false, 'not_found');
-        return {
-          isValid: false,
-          reason: 'not_found',
-          canRefresh: false
-        };
-      }
-
-      // Atualiza cache
-      this.sessionCache = sessionData;
-      this.lastValidation = now;
-
-      const isValid = this.isSessionValid(sessionData);
-      const remainingTime = isValid ? this.calculateRemainingTime(sessionData) : undefined;
-
-      SecureLogger.sessionValidation(
-        sessionData.medico_state, 
-        isValid, 
-        isValid ? undefined : 'expired',
-        remainingTime
-      );
-
-      return {
-        isValid,
-        sessionData: isValid ? sessionData : undefined,
-        reason: isValid ? undefined : 'expired',
-        canRefresh: !isValid && !!sessionData.refresh_token,
-        remainingTime
-      };
-    } catch (error) {
-      SecureLogger.error('Failed to check session validity', error);
-      return {
-        isValid: false,
-        reason: 'corrupted',
-        canRefresh: false
-      };
-    }
+  private async writeStorage(data: PscSessionsStorage): Promise<void> {
+    await fs.writeFile(STORAGE_FILE, JSON.stringify(data, null, 2), 'utf-8');
   }
 
-  /**
-   * Obtém token de acesso válido, com refresh automático se necessário
-   */
-  async getValidAccessToken(): Promise<string | null> {
-    const validation = await this.checkSessionValidity();
-
-    if (validation.isValid && validation.sessionData) {
-      return validation.sessionData.access_token;
-    }
-
-    // Tenta refresh se possível
-    if (validation.canRefresh && this.sessionCache?.refresh_token) {
-      const refreshResult = await this.refreshSession(this.sessionCache.refresh_token);
-      
-      if (refreshResult.success && refreshResult.sessionData) {
-        return refreshResult.sessionData.access_token;
-      }
-    }
-
-    return null;
-  }
-
-  /**
-   * Renova automaticamente o token usando refresh_token
-   */
-  async refreshSession(refreshToken: string): Promise<PscRefreshResult> {
-    try {
-      SecureLogger.tokenOperation('refresh_attempt', refreshToken.length);
-
-      // Implementação do refresh OAuth2
-      const refreshResponse = await this.performTokenRefresh(refreshToken);
-      
-      if (!this.sessionCache) {
-        throw new Error('No session data available for refresh');
-      }
-
-      // Atualiza dados da sessão
-      const updatedSession: PscSessionData = {
-        ...this.sessionCache,
-        access_token: refreshResponse.access_token,
-        expires_in: refreshResponse.expires_in || this.sessionCache.expires_in,
-        refresh_token: refreshResponse.refresh_token || this.sessionCache.refresh_token,
-        created_at: Date.now()
-      };
-
-      // Salva dados atualizados
-      await SecureStorage.saveSession(updatedSession);
-      this.sessionCache = updatedSession;
-      this.lastValidation = Date.now();
-
-      SecureLogger.refreshOperation(this.sessionCache.medico_state, true);
-      SecureLogger.tokenOperation('refresh_success', refreshResponse.access_token.length);
-
-      return {
-        success: true,
-        sessionData: updatedSession
-      };
-    } catch (error) {
-      SecureLogger.refreshOperation(this.sessionCache?.medico_state || 'unknown', false, 
-        error instanceof Error ? error.message : 'Unknown error');
-      
-      // Se refresh falhar, limpa sessão
-      await this.clearSession();
-      
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Refresh failed',
-        requiresReauth: true
-      };
-    }
-  }
-
-  /**
-   * Executa o refresh de token com a API do PSC
-   */
-  private async performTokenRefresh(refreshToken: string): Promise<PscTokenResponse> {
-    // NOTA: Implementar conforme documentação específica do PSC
-    // Exemplo genérico OAuth2:
+  async saveSession(medicoId: string, session: Omit<PscSession, 'created_at'>): Promise<void> {
+    const storage = await this.readStorage();
     
-    const tokenUrl = `${process.env.BRY_AUTH_URL}/oauth/token`;
-    
-    const response = await fetch(tokenUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: new URLSearchParams({
-        grant_type: 'refresh_token',
-        refresh_token: refreshToken,
-        client_id: process.env.BRY_CLIENT_ID || '',
-        client_secret: process.env.BRY_CLIENT_SECRET || '',
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Token refresh failed: ${response.status} - ${errorText}`);
-    }
-
-    const tokenData = await response.json();
-    
-    return {
-      access_token: tokenData.access_token,
-      expires_in: tokenData.expires_in,
-      refresh_token: tokenData.refresh_token,
-      token_type: tokenData.token_type,
-      scope: tokenData.scope
+    storage[medicoId] = {
+      ...session,
+      created_at: new Date().toISOString(),
     };
+
+    await this.writeStorage(storage);
+    console.info(`[PscSessionService] Session saved for medico: ${medicoId}, PSC: ${session.pscName}`);
   }
 
-  /**
-   * Limpa sessão atual (logout)
-   */
-  async clearSession(): Promise<void> {
-    try {
-      await SecureStorage.clearSession();
-      this.sessionCache = null;
-      this.lastValidation = 0;
-      
-      SecureLogger.info('Session cleared successfully');
-    } catch (error) {
-      SecureLogger.error('Failed to clear session', error);
-      throw error;
+  async getSession(medicoId: string): Promise<PscSession | null> {
+    const storage = await this.readStorage();
+    const session = storage[medicoId];
+
+    if (!session) {
+      console.info(`[PscSessionService] No session found for medico: ${medicoId}`);
+      return null;
     }
+
+    if (this.isExpired(session)) {
+      console.info(`[PscSessionService] Session expired for medico: ${medicoId}`);
+      return null;
+    }
+
+    console.info(`[PscSessionService] Valid session found for medico: ${medicoId}`);
+    return session;
   }
 
-  /**
-   * Verifica se existe sessão ativa
-   */
-  async hasActiveSession(): Promise<boolean> {
-    const validation = await this.checkSessionValidity();
-    return validation.isValid;
-  }
-
-  /**
-   * Obtém dados da sessão atual se válida
-   */
-  async getCurrentSession(): Promise<PscSessionData | null> {
-    const validation = await this.checkSessionValidity();
-    return validation.sessionData || null;
-  }
-
-  /**
-   * Verifica validade interna da sessão
-   */
-  private isSessionValid(session: PscSessionData): boolean {
-    const now = Date.now();
-    const expiryTime = session.created_at + (session.expires_in * 1000);
-    const isValid = now < (expiryTime - (TOKEN_EXPIRY_MARGIN * 1000));
+  async removeSession(medicoId: string): Promise<void> {
+    const storage = await this.readStorage();
     
-    return isValid;
-  }
-
-  /**
-   * Calcula tempo restante em segundos
-   */
-  private calculateRemainingTime(session: PscSessionData): number {
-    const now = Date.now();
-    const expiryTime = session.created_at + (session.expires_in * 1000);
-    const remainingMs = expiryTime - now;
-    return Math.max(0, Math.floor(remainingMs / 1000));
-  }
-
-  /**
-   * Middleware para verificação pré-assinatura
-   * Intercepta requisições e injeta token válido
-   */
-  async preSignatureCheck(): Promise<{ 
-    canProceed: boolean; 
-    token?: string; 
-    error?: string;
-    requiresReauth?: boolean;
-  }> {
-    const validation = await this.checkSessionValidity();
-
-    if (validation.isValid && validation.sessionData) {
-      SecureLogger.info('Pre-signature check: VALID session');
-      return {
-        canProceed: true,
-        token: validation.sessionData.access_token
-      };
+    if (storage[medicoId]) {
+      delete storage[medicoId];
+      await this.writeStorage(storage);
+      console.info(`[PscSessionService] Session removed for medico: ${medicoId}`);
     }
+  }
 
-    // Tenta refresh automático
-    if (validation.canRefresh && this.sessionCache?.refresh_token) {
-      SecureLogger.info('Pre-signature check: Attempting automatic refresh');
-      const refreshResult = await this.refreshSession(this.sessionCache.refresh_token);
-      
-      if (refreshResult.success && refreshResult.sessionData) {
-        return {
-          canProceed: true,
-          token: refreshResult.sessionData.access_token
-        };
+  isExpired(session: PscSession): boolean {
+    const created = new Date(session.created_at).getTime();
+    const expiresAt = created + (session.expires_in * 1000);
+    
+    return Date.now() >= expiresAt;
+  }
+
+  async getValidToken(medicoId: string): Promise<string | null> {
+    const session = await this.getSession(medicoId);
+    
+    if (!session) {
+      return null;
+    }
+    
+    if (this.isExpired(session)) {
+      console.info(`[PscSessionService] Session expired for medico: ${medicoId}, removing...`);
+      await this.removeSession(medicoId);
+      return null;
+    }
+    
+    return session.signature_session;
+  }
+
+  async listAllSessions(): Promise<PscSessionsStorage> {
+    const storage = await this.readStorage();
+    const validSessions: PscSessionsStorage = {};
+
+    for (const [medicoId, session] of Object.entries(storage)) {
+      if (!this.isExpired(session)) {
+        validSessions[medicoId] = session;
       }
     }
 
-    // Sessão inválida e não pode ser renovada
-    SecureLogger.warn('Pre-signature check: INVALID session, reauth required');
-    return {
-      canProceed: false,
-      error: validation.reason === 'not_found' 
-        ? 'Nenhuma sessão ativa encontrada' 
-        : 'Sua sessão de assinatura expirou por segurança',
-      requiresReauth: true
-    };
+    return validSessions;
   }
 }
 
-// Export singleton instance
-export const pscSessionService = PscSessionService.getInstance();
+export const pscSessionService = new PscSessionService();

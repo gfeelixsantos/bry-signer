@@ -34,7 +34,7 @@ class BryAuthService {
     const now = Date.now();
 
     if (this.tokenCache && this.tokenCache.expiresAt > now) {
-      console.info('[BryAuthService] Token em cache, retornando token existente');
+      console.info('[BryAuthService] Token em cache válido, reutilizando');
       return this.tokenCache.accessToken;
     }
 
@@ -65,12 +65,14 @@ class BryAuthService {
       }
 
       const data = JSON.parse(responseText);
-      console.info('[BryAuthService] Token gerado com sucesso');
-
       const expiresIn = data.expires_in || 3600;
+      console.info('[BryAuthService] Token gerado com sucesso');
+      console.info(`[BryAuthService] Token expires in: ${expiresIn}s`);
+
+      const marginSeconds = 300;
       this.tokenCache = {
         accessToken: data.access_token,
-        expiresAt: now + (expiresIn * 1000) - 60000,
+        expiresAt: now + ((expiresIn - marginSeconds) * 1000),
       };
 
       return this.tokenCache.accessToken;
@@ -78,6 +80,10 @@ class BryAuthService {
       console.error('[BryAuthService] Erro ao gerar token:', error);
       throw error;
     }
+  }
+
+  async getValidBryToken(): Promise<string> {
+    return this.getAccessToken();
   }
 
   clearCache(): void {

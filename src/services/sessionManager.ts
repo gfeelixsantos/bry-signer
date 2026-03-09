@@ -2,6 +2,8 @@ interface SessionState {
   state: string;
   validated: boolean;
   createdAt: number;
+  pscName?: string;
+  medicoId?: string;
 }
 
 const sessionMap = new Map<string, SessionState>();
@@ -31,13 +33,15 @@ export function isSessionValidated(state: string): boolean {
   return session?.validated ?? false;
 }
 
-export function createSession(state: string): void {
+export function createSession(state: string, pscName?: string, medicoId?: string): void {
   sessionMap.set(state, {
     state,
     validated: false,
     createdAt: Date.now(),
+    pscName,
+    medicoId,
   });
-  console.info(`[SessionManager] Session ${state} criada`);
+  console.info(`[SessionManager] Session ${state} criada${pscName ? ` para PSC: ${pscName}` : ''}${medicoId ? ` medico: ${medicoId}` : ''}`);
 }
 
 function cleanupOldSessions(): void {
@@ -51,3 +55,7 @@ function cleanupOldSessions(): void {
 }
 
 setInterval(cleanupOldSessions, SESSION_TIMEOUT);
+
+export function getSessionData(state: string): SessionState | undefined {
+  return sessionMap.get(state);
+}

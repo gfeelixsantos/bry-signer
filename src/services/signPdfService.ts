@@ -14,7 +14,6 @@ export async function signPdf(
 ): Promise<ArrayBuffer> {
   console.info(`[SignPdfService] Iniciando assinatura do arquivo: ${fileName}`);
   console.info(`[SignPdfService] KMS Type: ${kmsType}`);
-  console.info(`[SignPdfService] KMS Token: ${kmsToken?.substring(0, 50)}...`);
 
   if (!kmsToken) {
     throw new Error('kmsToken está vazio ou nulo');

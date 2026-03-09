@@ -72,7 +72,6 @@ export class BryEasySignService {
     const url = `${this.getEasySignUrl()}${endpoint}`;
 
     console.info(`[BryEasySignService] Request: ${options.method || 'GET'} ${url}`);
-    console.info(`[BryEasySignService] Headers: Authorization: Bearer ${token.substring(0, 20)}...`);
 
     try {
       const response = await fetch(url, {

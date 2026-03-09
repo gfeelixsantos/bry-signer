@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { setSessionValidated } from '@/services/sessionManager';
-import { savePscToken } from '@/services/pscTokenStorage';
+import { setSessionValidated, getSessionData } from '@/services/sessionManager';
+import { pscSessionService } from '@/services/PscSessionService';
 
 const HTML_RESPONSE = `<!DOCTYPE html>
 <html>
@@ -75,7 +75,15 @@ export async function GET(request: NextRequest) {
   }
 
   if (token) {
-    await savePscToken(state, token);
+    const sessionData = getSessionData(state);
+    const pscName = sessionData?.pscName || 'Unknown';
+    const medicoId = sessionData?.medicoId || state;
+    
+    await pscSessionService.saveSession(medicoId, {
+      pscName,
+      signature_session: token,
+      expires_in: 86400,
+    });
   } else {
     console.warn('[Callback] Token não foi retornado pelo PSC na URL.');
   }

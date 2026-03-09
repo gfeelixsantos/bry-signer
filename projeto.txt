@@ -1,0 +1,32 @@
+Tópico 1: Usar apenas o BRy Easy Sign (Assinatura Híbrida)
+Sim, é perfeitamente possível e a documentação confirma isso. O BRy Easy Sign foi desenhado exatamente para gerenciar "Envelopes" híbridos.
+A viabilidade: Na mesma requisição (POST /signatures), você pode adicionar o documento e definir o array de signersData
+. Para o funcionário, você pode configurar uma assinatura simples solicitando apenas evidências como OTP_EMAIL, OTP_WHATSAPP ou SELFIE
+. Para o médico, você pode exigir a assinatura qualificada (Certificado em Nuvem/PSC) na mesma interface
+.
+O "Pulo do Gato" (Análise Arquitetural): O Easy Sign é um motor de portal (Portal de Assinaturas). Ao criar o envelope, a API não devolve o PDF assinado na hora; ela gera um link de acesso à página de assinatura para cada assinante
+.
+O que isso significa na prática: O seu médico terá que sair da tela do prontuário do seu sistema, abrir o e-mail (ou o iframe do Easy Sign), clicar em "Assinar", passar pelas telas da BRy e depois voltar para o seu sistema.
+Se você quer uma experiência invisível (Seamless/White-label) onde o médico clica em um botão "Finalizar Atendimento" no seu sistema e o PDF já cai assinado no banco de dados, você precisa do BRy Integra + HUB Signer (como estávamos desenhando), pois ele injeta a assinatura direto no arquivo via backend (POST /fw/v1/pdf/kms/lote/assinaturas)
+.
+Tópico 2: É possível "segurar" a validação do PSC para o médico não ficar escaneando/autorizando toda hora?
+Sim! E essa é a melhor prática recomendada para a área médica. Você não precisa incomodar o médico com o celular (Push/PIN/QR Code) a cada nova receita ou atestado.
+A documentação dos provedores PSC (como BirdID, SerproID, Vidaas) integrados ao BRy chama isso de Escopo de Sessão (scope).
+Quando você for gerar a tela de login do médico no início do plantão dele, você usará a API do Integra (POST /api/service/psc/link) e deverá definir dois parâmetros cruciais:
+O Parâmetro scope: Você deve defini-lo como signature_session (Sessão de assinatura). A documentação define que isso "permite várias assinaturas em várias chamadas à API, desde que o token esteja dentro do prazo de validade"
+. (Nota: não confunda com multi_signature, que serve apenas para assinar um lote de PDFs de uma única vez
+) .
+O Parâmetro lifetime: Você pode definir a duração (em segundos) desse token
+. A documentação do BirdID, por exemplo, destaca que para Pessoas Físicas o token pode durar até 7 dias
+.
+Como funciona o fluxo ideal na prática:
+O médico chega na clínica de manhã, loga no seu sistema e clica em "Conectar meu Certificado".
+Ele aprova no celular (BirdID/Vidaas) uma única vez.
+O Integra BRy retorna um token para o seu backend
+.
+O seu backend "segura" (salva) esse token de forma segura (em um cache ou cookie de sessão atrelado ao login do médico).
+Durante todo o dia, cada vez que o médico emitir um novo ASO ou Receita, o seu backend usa esse mesmo token salvo e chama a API do HUB Signer silenciosamente. O médico atende 30 pacientes sem encostar no celular novamente!
+💡 Resumo: Qual caminho escolher?
+Vá de BRy Easy Sign se: Você quer programar menos, não se importa em usar a interface (tela) da BRy e quer um processo fácil de "enviar documento e colher assinaturas" por WhatsApp/Email
+.
+Vá de BRy Integra + HUB Signer se: Você quer construir um sistema médico de alto padrão, onde o médico loga com o certificado uma vez por dia (signature_session) e assina os atestados em milissegundos, com um clique, sem sair da sua tela.

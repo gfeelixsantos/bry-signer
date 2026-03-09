@@ -2,7 +2,7 @@
 
 import { bryClient } from '@/services/bryClient';
 import { createSession } from '@/services/sessionManager';
-import { getPscToken } from '@/services/pscTokenStorage';
+import { pscSessionService } from '@/services/PscSessionService';
 
 function generateUUID(): string {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
@@ -26,12 +26,13 @@ export async function listPSCs(): Promise<{ success: boolean; pscs?: Array<{ nam
 
 export async function generateIntegrationLink(
   pscName: string
-): Promise<{ success: boolean; url?: string; token?: string; state?: string; error?: string }> {
+): Promise<{ success: boolean; url?: string; token?: string; state?: string; medicoId?: string; error?: string }> {
   try {
     console.info(`[ServerAction] Gerando link de integração para PSC: ${pscName}`);
 
     const state = generateUUID();
-    createSession(state);
+    const medicoId = `medico_${state}`;
+    createSession(state, pscName, medicoId);
 
     const result = await bryClient.generateIntegrationLink(pscName, state);
 
@@ -40,6 +41,7 @@ export async function generateIntegrationLink(
       url: result.url,
       token: result.token,
       state,
+      medicoId,
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Erro desconhecido';
@@ -48,13 +50,23 @@ export async function generateIntegrationLink(
   }
 }
 
-export async function checkSavedPscToken(): Promise<{ success: boolean; token?: string; isValid?: boolean; error?: string }> {
+export async function checkSavedPscToken(medicoId?: string): Promise<{ success: boolean; token?: string; isValid?: boolean; medicoId?: string; error?: string }> {
   try {
     console.info('[ServerAction] Verificando se existe token PSC salvo...');
-    const result = await getPscToken();
-
-    if (result) {
-      return { success: true, token: result.token, isValid: result.isValid };
+    
+    if (medicoId) {
+      const session = await pscSessionService.getSession(medicoId);
+      if (session) {
+        return { success: true, token: session.signature_session, isValid: true, medicoId };
+      }
+    }
+    
+    const allSessions = await pscSessionService.listAllSessions();
+    const firstMedicoId = Object.keys(allSessions)[0];
+    
+    if (firstMedicoId) {
+      const session = allSessions[firstMedicoId];
+      return { success: true, token: session.signature_session, isValid: true, medicoId: firstMedicoId };
     }
 
     return { success: true, token: undefined, isValid: false };
