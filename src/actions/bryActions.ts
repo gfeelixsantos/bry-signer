@@ -1,7 +1,6 @@
 'use server';
 
 import { bryClient } from '@/services/bryClient';
-import { createSession } from '@/services/sessionManager';
 import { pscSessionService } from '@/services/psc-session-service';
 
 function generateUUID(): string {
@@ -38,7 +37,6 @@ export async function generateIntegrationLink(
 
     const state = generateUUID();
     const medicoId = `medico_${state}`;
-    createSession(state, pscName, medicoId);
 
     const result = await bryClient.generateIntegrationLink(pscName, state);
 

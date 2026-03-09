@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { setSessionValidated } from '@/services/sessionManager';
 import { pscSessionService } from '@/services/psc-session-service';
 
 const HTML_RESPONSE = `<!DOCTYPE html>
@@ -83,10 +82,8 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  await pscSessionService.updateAuthorization(session.medicoId, true);
+  await pscSessionService.authorizeSessionByState(state);
   console.info(`[Callback] Sessão autorizada para medico: ${session.medicoId}`);
-
-  setSessionValidated(state);
 
   return new NextResponse(HTML_RESPONSE, {
     status: 200,
